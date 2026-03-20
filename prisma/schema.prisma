@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String         @id @default(cuid())
+  name             String?
+  email            String         @unique
+  hashedPassword   String?
+  role             Role           @default(USER)
+  location         String?
+  stylePreferences String?        @default("[]") // JSON string array
+  sizes            String?        @default("{}") // JSON object { top, bottom, shoe }
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  
+  wardrobeItems    WardrobeItem[]
+  orders           Order[]
+  cartItems        CartItem[]
+  chatSessions     ChatSession[]
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model CartItem {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  size      String
+  quantity  Int     @default(1)
+
+  @@unique([userId, productId, size])
+}
+
+model Product {
+  id            String         @id @default(cuid())
+  name          String
+  description   String         @db.Text
+  category      String
+  price         Decimal        @db.Decimal(10, 2)
+  salePrice     Decimal?       @db.Decimal(10, 2)
+  colourName    String
+  colourHex     String
+  occasions     String         @default("[]") // JSON string array
+  weather       String         @default("[]") // JSON string array
+  season        String         @default("[]") // JSON string array
+  isVisible     Boolean        @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  images        ProductImage[]
+  stock         ProductStock[]
+  reviews       Review[]
+  cartItems     CartItem[]
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  isPrimary Boolean  @default(false)
+}
+
+model ProductStock {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  size      String
+  quantity  Int      @default(0)
+
+  @@unique([productId, size])
+}
+
+model WardrobeItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  imageUrl  String
+  category  String?
+  colour    String?
+  tags      String?  @default("{}") // JSON object mapping occasion => true/false
+  createdAt DateTime @default(now())
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  orderNumber     String        @unique
+  userId          String?       // Allow guest checkout
+  user            User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  status          OrderStatus   @default(PENDING)
+  totalValue      Decimal       @db.Decimal(10, 2)
+  subtotal        Decimal       @db.Decimal(10, 2)
+  deliveryCost    Decimal       @db.Decimal(10, 2)
+  deliveryAddress String        @db.Text // JSON string
+  trackingNumber  String?
+  notes           String?       @db.Text
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  items           OrderItem[]
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String
+  productName String
+  size        String
+  quantity    Int
+  price       Decimal  @db.Decimal(10, 2)
+  imageUrl    String?
+}
+
+model Review {
+  id           String   @id @default(cuid())
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  rating       Int
+  reviewerName String
+  text         String   @db.Text
+  date         DateTime @default(now())
+}
+
+model ChatSession {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  String   @db.Text // JSON array of messages
+  summary   String?  @db.Text // Summary of conversation for context carry-forward
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
