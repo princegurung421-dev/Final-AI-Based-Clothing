@@ -18,13 +18,16 @@ export function LayoutWrapper({
   return (
     <body className={cn(
       "flex flex-col bg-background text-foreground transition-colors duration-300",
-      isAssistant ? "h-screen overflow-hidden" : "min-h-screen"
+      isAssistant ? "h-dvh overflow-hidden" : "min-h-screen"
     )}>
       {header}
-      <main className="flex-grow flex flex-col">
+      <main className={cn(
+        "flex flex-col",
+        isAssistant ? "flex-1 min-h-0" : "flex-grow"
+      )}>
         {children}
       </main>
-      {footer}
+      {!isAssistant && footer}
     </body>
   );
 }
