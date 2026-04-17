@@ -518,7 +518,7 @@ export default function AssistantPage() {
   const activeSessionBadge = sessions.find(s => s.id === sessionId)?.title
 
   return (
-    <div className="flex h-full min-h-0 max-h-[calc(100dvh-64px)] bg-[#FAFAF9] text-[#1C1C1A]">
+    <div className="flex h-full min-h-0 max-h-[calc(100dvh-64px)] md:max-h-[calc(100dvh-92px)] bg-[#FAFAF9] text-[#1C1C1A]">
 
       {/* ── Sidebar backdrop (mobile) ── */}
       {sidebarOpen && (

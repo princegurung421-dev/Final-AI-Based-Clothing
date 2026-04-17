@@ -37,7 +37,6 @@ export function Footer() {
             <h3 className="font-semibold text-[14px] uppercase tracking-wider text-white/90">Help</h3>
             <div className="flex flex-col gap-2.5">
               <Link href="#" className="text-[14px] text-white/50 hover:text-primary transition-colors">FAQ</Link>
-              <Link href="#" className="text-[14px] text-white/50 hover:text-primary transition-colors">Returns & Exchanges</Link>
               <Link href="#" className="text-[14px] text-white/50 hover:text-primary transition-colors">Contact Us</Link>
             </div>
           </div>

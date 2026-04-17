@@ -17,8 +17,8 @@ export function LayoutWrapper({
 
   return (
     <body className={cn(
-      "flex flex-col bg-background text-foreground transition-colors duration-300",
-      isAssistant ? "h-dvh overflow-hidden" : "min-h-screen"
+      "flex flex-col bg-background text-foreground transition-colors duration-300 overflow-x-hidden",
+      isAssistant ? "h-dvh overflow-y-hidden" : "min-h-screen"
     )}>
       {header}
       <main className={cn(

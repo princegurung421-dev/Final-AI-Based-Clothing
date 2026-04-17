@@ -97,22 +97,19 @@ export function Header({ user, cartCount = 0 }: HeaderProps) {
   return (
     <>
       <header className={cn(
-        "sticky top-0 w-full shrink-0 z-40 transition-all duration-300",
+        "sticky top-0 w-full shrink-0 z-40 transition-shadow duration-200",
         scrolled
           ? "bg-white/95 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.06)]"
           : "bg-white"
       )}>
-        {/* Top bar - only shows when not scrolled */}
-        {!scrolled && (
-          <div className="hidden md:block bg-foreground text-white text-center text-[12px] py-1.5 font-medium tracking-wide">
-            Free delivery on orders over {"\u00A3"}50 &mdash; AI-powered styling, just for you
-          </div>
-        )}
+        {/* Announcement bar — always visible (hiding it on scroll caused a
+            feedback loop: height drop → scrollY falls below threshold →
+            bar re-shows → ad infinitum). Static height avoids the flicker. */}
+        <div className="hidden md:block bg-foreground text-white text-center text-[12px] py-1.5 font-medium tracking-wide">
+          Free delivery on orders over {"\u00A3"}50 &mdash; AI-powered styling, just for you
+        </div>
 
-        <div className={cn(
-          "flex items-center px-5 md:px-8 border-b border-border/40",
-          scrolled ? "h-[60px]" : "h-16"
-        )}>
+        <div className="flex items-center px-5 md:px-8 h-16 border-b border-border/40">
           {/* Mobile: hamburger */}
           <button className="lg:hidden mr-3 p-1" onClick={() => setIsMobileMenuOpen(true)} aria-label="Open menu">
             <Menu className="w-5 h-5 text-foreground" />
