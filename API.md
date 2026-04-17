@@ -15,8 +15,12 @@ All examples assume the app runs at `http://localhost:3000`. For production depl
    - [GET /api/chat/session](#get-apichatsession)
    - [POST /api/chat/session](#post-apichatsession)
    - [DELETE /api/chat/session](#delete-apichatsession)
+   - [GET /api/chat/session/[id]](#get-apichatsessionid)
+   - [DELETE /api/chat/session/[id]](#delete-apichatsessionid)
    - [POST /api/chat/cart-action](#post-apichatcart-action)
    - [GET /api/cart/count](#get-apicartcount)
+   - [POST /api/stripe/checkout](#post-apistripecheckout)
+   - [POST /api/stripe/webhook](#post-apistripewebhook)
    - [/api/auth/*](#apiauth-nextauth)
 4. [Server Actions (write API)](#server-actions-write-api)
 5. [Tool Reference — AI Chat Tools](#tool-reference)
@@ -159,36 +163,32 @@ The response will include tool calls (e.g. `searchProducts`, `getRecommendations
 
 ### `GET /api/chat/session`
 
-Return the latest chat session for the authenticated user.
+Return the list of the user's past chat sessions (for the sidebar).
 
-**Auth**: required (401 otherwise).
+**Auth**: required (returns `{ sessions: [] }` for guests).
 
 **Response**:
 
 ```json
 {
-  "messages": [ /* UIMessage[] */ ],
-  "previousSummary": "User: need a jacket...\nAssistant: ...",
-  "sessionId": "ckxxx..."
+  "sessions": [
+    {
+      "id": "ckxxx...",
+      "title": "Find me a date night outfit",
+      "preview": "User: find me a date night outfit under £200...",
+      "updatedAt": "2026-04-17T18:32:00.000Z"
+    }
+  ]
 }
 ```
 
-- If the session is still active (< 30 min since last update): `messages` contains the conversation, `previousSummary` is `null`, `sessionId` is the active ID.
-- If expired: `messages` is `[]`, `previousSummary` is a string, `sessionId` is `null`.
-- If no session ever existed: all three fields empty.
-
-**Example**:
-
-```bash
-curl http://localhost:3000/api/chat/session \
-  -H "Cookie: authjs.session-token=..."
-```
+Sorted by `updatedAt` desc, up to 50 most recent.
 
 ---
 
 ### `POST /api/chat/session`
 
-Save / upsert the chat session.
+Save / upsert a chat session. `title` is auto-derived from the first user message.
 
 **Auth**: required.
 
@@ -208,17 +208,41 @@ Save / upsert the chat session.
 
 **Response**: `{ "sessionId": "ckxxx..." }`
 
-Sessions auto-expire 30 minutes after the last write. The server also re-computes a text summary each write.
+Sessions no longer expire — they live permanently in the sidebar until the user deletes them.
 
 ---
 
 ### `DELETE /api/chat/session`
 
-Mark all active sessions for the user as expired (starts a fresh chat next time `GET` is called).
+Delete **all** chat sessions for the user.
 
-**Auth**: required.
+**Auth**: required. **Response**: `{ "success": true }`
 
-**Response**: `{ "success": true }`
+---
+
+### `GET /api/chat/session/[id]`
+
+Load a specific past conversation (for when the user clicks it in the sidebar).
+
+**Auth**: required. **Response**:
+
+```json
+{
+  "id": "ckxxx...",
+  "title": "Find me a date night outfit",
+  "messages": [ /* UIMessage[] */ ],
+  "summary": "User: ...\nAssistant: ...",
+  "updatedAt": "..."
+}
+```
+
+Returns 404 if the session doesn't exist or belongs to a different user.
+
+---
+
+### `DELETE /api/chat/session/[id]`
+
+Delete one specific past session. **Auth**: required.
 
 ---
 
@@ -280,6 +304,75 @@ Returns the total number of items in the authenticated user's cart. Used by the 
 ```
 
 Count is the sum of `quantity` across all cart items — not the number of distinct rows.
+
+---
+
+### `POST /api/stripe/checkout`
+
+Snapshot the cart into a new `PENDING` Order and create a Stripe PaymentIntent linked to it. The client uses the returned `clientSecret` with `stripe.confirmCardPayment()` to actually charge the card.
+
+**Auth**: required.
+
+**Request body**:
+
+```json
+{
+  "fullName": "Alex Morgan",
+  "addressLine1": "42 Kensington Gardens",
+  "addressLine2": "",
+  "city": "London",
+  "postcode": "SW1A 1AA",
+  "country": "United Kingdom"
+}
+```
+
+**Success** (`200`):
+
+```json
+{
+  "clientSecret": "pi_3xxx_secret_xxx",
+  "orderNumber": "WW00000042",
+  "orderId": "ckxxx..."
+}
+```
+
+**Errors**:
+
+| Status | When |
+| --- | --- |
+| 400 | Missing address fields; cart is empty; an item in the cart exceeds available stock |
+| 401 | Not signed in |
+| 500 | Stripe rejected the PaymentIntent creation |
+
+The server validates stock before creating anything. If Stripe fails after the Order is created, the server rolls back the Order.
+
+**Side effects**: creates a DB row (`Order` + `OrderItem`s). Does **not** decrement stock or clear the cart — that happens in the webhook, once payment actually succeeds.
+
+---
+
+### `POST /api/stripe/webhook`
+
+Stripe → server webhook endpoint. Verifies the `Stripe-Signature` header against `STRIPE_WEBHOOK_SECRET`, then handles:
+
+| Event | Effect |
+| --- | --- |
+| `payment_intent.succeeded` | Order PENDING → PROCESSING · stock decremented · user's cart cleared (idempotent — re-delivery is a no-op) |
+| `payment_intent.payment_failed` | Logged; Order stays PENDING so the user can retry from checkout |
+| `charge.refunded` | Adds a refund note on the Order |
+| any other | Acknowledged with 200 |
+
+**Auth**: signature-based, **not** cookie-based.
+
+**Important**: the handler reads the raw request body — the route deliberately avoids `req.json()` so the HMAC signature check passes.
+
+**Curl'ing this directly will always fail** with 400 because you can't forge the signature. To simulate events, use the Stripe CLI:
+
+```bash
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+stripe trigger payment_intent.succeeded
+```
+
+See [README.md §Checkout with Stripe](./README.md#checkout-with-stripe) for dashboard setup.
 
 ---
 

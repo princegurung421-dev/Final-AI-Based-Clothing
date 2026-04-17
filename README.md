@@ -192,6 +192,7 @@ NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME="your_cloud_name"
 # Stripe test mode
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_..."
 STRIPE_SECRET_KEY="sk_test_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."
 ```
 
 ### Getting each key
@@ -265,12 +266,35 @@ To set up the preset:
 
 ## Checkout with Stripe
 
-1. `POST` via `createOrder` server action builds an order record (`PENDING`) and a Stripe Checkout Session.
-2. User is redirected to Stripe-hosted checkout.
-3. On return, the session is verified and order is moved to `PROCESSING`.
-4. Admins then progress the status to `SHIPPED` / `DELIVERED` in `/admin/orders`.
+Uses **PaymentIntents + webhook**, on-site (no redirect to Stripe-hosted pages).
 
-Test cards: use `4242 4242 4242 4242`, any future expiry, any CVC, any postcode.
+1. Client posts the delivery address to `POST /api/stripe/checkout`.
+2. Server snapshots the cart into a `PENDING` Order and creates a Stripe PaymentIntent with `metadata.orderId`. Returns `{ clientSecret, orderNumber }`.
+3. Client calls `stripe.confirmCardPayment(clientSecret, { payment_method: { card, billing_details } })` — this actually charges the card.
+4. Stripe fires `payment_intent.succeeded` → our webhook at `/api/stripe/webhook` moves the order to `PROCESSING`, decrements stock, clears the user's cart.
+5. `payment_intent.payment_failed` leaves the order in `PENDING` so the customer can retry.
+6. Admins progress `PROCESSING → SHIPPED → DELIVERED` in `/admin/orders`.
+
+Test cards: `4242 4242 4242 4242` (always succeeds), any future expiry, any CVC.
+
+### Setting up the Stripe webhook
+
+**Production (Vercel)**
+
+1. Stripe Dashboard → Developers → Webhooks → **Add endpoint**
+2. Endpoint URL: `https://your-domain.vercel.app/api/stripe/webhook`
+3. Events to send: `payment_intent.succeeded`, `payment_intent.payment_failed`, `charge.refunded`
+4. Click the new endpoint → **Signing secret** → Reveal → copy `whsec_...`
+5. Paste it into Vercel → Project Settings → Environment Variables as `STRIPE_WEBHOOK_SECRET`
+
+**Local development**
+
+```bash
+# In a separate terminal, with the Stripe CLI installed and `stripe login` done once:
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+# It prints a temporary `whsec_...` — paste it into your .env as STRIPE_WEBHOOK_SECRET and restart `npm run dev`.
+stripe trigger payment_intent.succeeded   # in a third terminal, to sanity-check the handler
+```
 
 ## Admin Panel
 
