@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { LayoutWrapper } from "@/components/layout/LayoutWrapper";
+import { PWAInstall } from "@/components/PWAInstall";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -16,7 +17,22 @@ const jakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: "WearWise | AI-Powered Personal Stylist",
-  description: "Your personal AI stylist. Shop and get outfit recommendations through conversation.",
+  description:
+    "Your personal AI stylist. Shop and get outfit recommendations through conversation.",
+  applicationName: "WearWise",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "WearWise",
+  },
+  manifest: "/manifest.webmanifest",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#4A7C59",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export const dynamic = 'force-dynamic';
@@ -42,6 +58,7 @@ export default async function RootLayout({
       >
         <ToastProvider>
           {children}
+          <PWAInstall />
         </ToastProvider>
       </LayoutWrapper>
     </html>

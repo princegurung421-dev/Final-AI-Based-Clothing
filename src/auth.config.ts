@@ -13,7 +13,11 @@ export const authConfig = {
         nextUrl.pathname.startsWith('/browse') ||
         nextUrl.pathname.startsWith('/product') ||
         nextUrl.pathname === '/login' ||
-        nextUrl.pathname === '/register';
+        nextUrl.pathname === '/register' ||
+        nextUrl.pathname === '/faq' ||
+        nextUrl.pathname === '/contact' ||
+        nextUrl.pathname === '/privacy' ||
+        nextUrl.pathname === '/terms';
       
       const isAdminPath = nextUrl.pathname.startsWith('/admin');
 

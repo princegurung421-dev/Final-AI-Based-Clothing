@@ -219,10 +219,13 @@ export default function CheckoutClient({
           </Button>
         </div>
 
-        <p className="text-[11px] text-muted mt-4">
-          Test card: <span className="font-mono">4242 4242 4242 4242</span> · any future
-          expiry · any CVC · any postcode.
-        </p>
+       <p className="mt-4 text-xs text-muted leading-relaxed">
+        <span className="font-semibold text-foreground">Test Card Details</span>
+        <br />
+        <span className="font-mono tracking-wide">4242 4242 4242 4242</span>
+        <br />
+        Expiry: <span className="font-medium">12/31</span> · CVC: <span className="font-medium">123</span> · Postcode: <span className="font-medium">RG1 1AF</span>
+      </p>
       </form>
     )
   }

@@ -36,8 +36,8 @@ export function Footer() {
           <div className="flex flex-col gap-4">
             <h3 className="font-semibold text-[14px] uppercase tracking-wider text-white/90">Help</h3>
             <div className="flex flex-col gap-2.5">
-              <Link href="#" className="text-[14px] text-white/50 hover:text-primary transition-colors">FAQ</Link>
-              <Link href="#" className="text-[14px] text-white/50 hover:text-primary transition-colors">Contact Us</Link>
+              <Link href="/faq" className="text-[14px] text-white/50 hover:text-primary transition-colors">FAQ</Link>
+              <Link href="/contact" className="text-[14px] text-white/50 hover:text-primary transition-colors">Contact Us</Link>
             </div>
           </div>
 
@@ -54,8 +54,8 @@ export function Footer() {
         <div className="pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
           <span className="text-[13px] text-white/40">&copy; {new Date().getFullYear()} WearWise. All rights reserved.</span>
           <div className="flex items-center gap-6">
-            <Link href="#" className="text-[13px] text-white/40 hover:text-primary transition-colors">Privacy Policy</Link>
-            <Link href="#" className="text-[13px] text-white/40 hover:text-primary transition-colors">Terms of Service</Link>
+            <Link href="/privacy" className="text-[13px] text-white/40 hover:text-primary transition-colors">Privacy Policy</Link>
+            <Link href="/terms" className="text-[13px] text-white/40 hover:text-primary transition-colors">Terms of Service</Link>
           </div>
         </div>
       </div>
