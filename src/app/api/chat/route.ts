@@ -123,12 +123,8 @@ ORDERS:
 - Use viewOrders to show order history.
 - Use getOrderDetails for a specific order.
 
-WARDROBE:
-- Use viewWardrobe to browse items the user already owns.
-- Use addToWardrobe to save new wardrobe items.
-
 STYLE:
-- Use getStyleAdvice to get context for personalized recommendations based on weather, wardrobe, and preferences.
+- Use getStyleAdvice to get context for personalized recommendations based on weather and preferences.
 
 GUIDELINES:
 - Keep responses concise -- 1-3 sentences plus tool results.
@@ -456,74 +452,14 @@ GUIDELINES:
           },
         }),
 
-        // ── View Wardrobe ──
-        viewWardrobe: tool({
-          description: "Browse the user's personal wardrobe items they already own.",
-          parameters: z.object({
-            category: z.string().optional().describe("Filter by category: Tops, Trousers, Outerwear, Footwear, Dresses, Accessories"),
-            colour: z.string().optional().describe('Filter by colour'),
-          }),
-          execute: async ({ category, colour }) => {
-            if (!userId) return { type: 'authRequired', error: 'Sign in to view your wardrobe.' };
-
-            try {
-              const where: any = { userId };
-              if (category) where.category = { contains: category, mode: 'insensitive' };
-              if (colour) where.colour = { contains: colour, mode: 'insensitive' };
-
-              const [items, totalCount] = await Promise.all([
-                prisma.wardrobeItem.findMany({ where, take: 12, orderBy: { createdAt: 'desc' } }),
-                prisma.wardrobeItem.count({ where: { userId } }),
-              ]);
-
-              return {
-                type: 'wardrobe',
-                items: items.map((i) => ({
-                  id: i.id,
-                  imageUrl: i.imageUrl,
-                  category: i.category,
-                  colour: i.colour,
-                  tags: i.tags,
-                })),
-                totalCount,
-              };
-            } catch {
-              return { type: 'error', error: 'Failed to load wardrobe.' };
-            }
-          },
-        }),
-
-        // ── Add to Wardrobe ──
-        addToWardrobe: tool({
-          description: 'Add a new item to the user\'s personal wardrobe.',
-          parameters: z.object({
-            imageUrl: z.string().describe('URL of the wardrobe item image'),
-            category: z.string().optional().describe('Category: Tops, Trousers, Outerwear, Footwear, Dresses, Accessories'),
-            colour: z.string().optional().describe('Colour of the item'),
-          }),
-          execute: async ({ imageUrl, category, colour }) => {
-            if (!userId) return { type: 'authRequired', error: 'Sign in to manage your wardrobe.' };
-
-            try {
-              await prisma.wardrobeItem.create({
-                data: { userId, imageUrl, category: category || null, colour: colour || null },
-              });
-              return { type: 'wardrobeAction', action: 'added', message: 'Added to your wardrobe.' };
-            } catch {
-              return { type: 'error', error: 'Failed to add to wardrobe.' };
-            }
-          },
-        }),
-
         // ── Style Advice ──
         getStyleAdvice: tool({
-          description: 'Get personalized style context based on the user\'s profile, wardrobe, and current weather. Use this to compose personalized advice.',
+          description: 'Get personalized style context based on the user\'s profile and current weather. Use this to compose personalized advice.',
           parameters: z.object({
             occasion: z.string().optional().describe('What the advice is for'),
           }),
           execute: async ({ occasion }) => {
             try {
-              let wardrobeSummary: any = null;
               let preferences = null;
               let sizes = null;
 
@@ -534,14 +470,6 @@ GUIDELINES:
                 });
                 preferences = user?.stylePreferences;
                 sizes = user?.sizes;
-
-                const wardrobeItems = await prisma.wardrobeItem.findMany({
-                  where: { userId },
-                  take: 20,
-                });
-                const categories = [...new Set(wardrobeItems.map((i) => i.category).filter(Boolean))];
-                const colours = [...new Set(wardrobeItems.map((i) => i.colour).filter(Boolean))];
-                wardrobeSummary = { totalItems: wardrobeItems.length, categories, colours };
               }
 
               return {
@@ -550,7 +478,6 @@ GUIDELINES:
                 occasion: occasion || 'general',
                 preferences,
                 sizes,
-                wardrobe: wardrobeSummary,
                 isLoggedIn: !!userId,
               };
             } catch {

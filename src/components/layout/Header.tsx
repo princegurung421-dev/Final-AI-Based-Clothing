@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { ShoppingBag, Menu, X, User, LogOut, MessageSquare, Search, ChevronDown, Settings, Package, Shirt, Heart } from "lucide-react"
+import { ShoppingBag, Menu, X, User, LogOut, MessageSquare, Search, ChevronDown, Settings, Package, LayoutDashboard } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { logout } from "@/app/login/actions"
 
@@ -12,6 +12,7 @@ interface HeaderProps {
     name?: string | null;
     email?: string | null;
     image?: string | null;
+    role?: string | null;
   } | null;
   cartCount?: number;
 }
@@ -150,23 +151,22 @@ export function Header({ user, cartCount = 0 }: HeaderProps) {
                 </Link>
               );
             })}
-            {user && (
-              <>
-                <Link
-                  href="/wardrobe"
-                  className={cn(
-                    "relative px-4 py-2 text-[14px] font-medium transition-colors rounded-lg",
-                    pathname === "/wardrobe"
-                      ? "text-primary"
-                      : "text-foreground/70 hover:text-foreground hover:bg-zinc-50"
-                  )}
-                >
-                  Wardrobe
-                  {pathname === "/wardrobe" && (
-                    <span className="absolute bottom-0 left-4 right-4 h-[2px] bg-primary rounded-full" />
-                  )}
-                </Link>
-              </>
+            {user?.role === "ADMIN" && (
+              <Link
+                href="/admin"
+                className={cn(
+                  "relative px-4 py-2 text-[14px] font-medium transition-colors rounded-lg",
+                  pathname.startsWith("/admin")
+                    ? "text-primary"
+                    : "text-foreground/70 hover:text-foreground hover:bg-zinc-50"
+                )}
+              >
+                <LayoutDashboard className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
+                Admin
+                {pathname.startsWith("/admin") && (
+                  <span className="absolute bottom-0 left-4 right-4 h-[2px] bg-primary rounded-full" />
+                )}
+              </Link>
             )}
           </nav>
 
@@ -262,10 +262,12 @@ export function Header({ user, cartCount = 0 }: HeaderProps) {
                           <Package className="w-4 h-4 text-muted" />
                           My Orders
                         </Link>
-                        <Link href="/wardrobe" className="flex items-center gap-3 px-4 py-2.5 text-[13px] text-foreground/80 hover:bg-zinc-50 hover:text-foreground transition-colors">
-                          <Shirt className="w-4 h-4 text-muted" />
-                          My Wardrobe
-                        </Link>
+                        {user.role === "ADMIN" && (
+                          <Link href="/admin" className="flex items-center gap-3 px-4 py-2.5 text-[13px] text-foreground/80 hover:bg-zinc-50 hover:text-foreground transition-colors">
+                            <LayoutDashboard className="w-4 h-4 text-muted" />
+                            Admin Panel
+                          </Link>
+                        )}
                         <Link href="/cart" className="flex items-center gap-3 px-4 py-2.5 text-[13px] text-foreground/80 hover:bg-zinc-50 hover:text-foreground transition-colors">
                           <ShoppingBag className="w-4 h-4 text-muted" />
                           Shopping Bag
@@ -405,10 +407,12 @@ export function Header({ user, cartCount = 0 }: HeaderProps) {
                   <Package className="w-4 h-4 text-muted" />
                   Orders
                 </Link>
-                <Link href="/wardrobe" className={cn("flex items-center gap-3 px-3 py-2.5 rounded-xl text-[15px] font-medium transition-colors", pathname === "/wardrobe" ? "text-primary bg-primary/[0.06]" : "text-foreground hover:bg-zinc-50")}>
-                  <Shirt className="w-4 h-4 text-muted" />
-                  Wardrobe
-                </Link>
+                {user.role === "ADMIN" && (
+                  <Link href="/admin" className={cn("flex items-center gap-3 px-3 py-2.5 rounded-xl text-[15px] font-medium transition-colors", pathname.startsWith("/admin") ? "text-primary bg-primary/[0.06]" : "text-foreground hover:bg-zinc-50")}>
+                    <LayoutDashboard className="w-4 h-4 text-muted" />
+                    Admin Panel
+                  </Link>
+                )}
                 <Link href="/cart" className={cn("flex items-center gap-3 px-3 py-2.5 rounded-xl text-[15px] font-medium transition-colors", pathname === "/cart" ? "text-primary bg-primary/[0.06]" : "text-foreground hover:bg-zinc-50")}>
                   <ShoppingBag className="w-4 h-4 text-muted" />
                   Bag

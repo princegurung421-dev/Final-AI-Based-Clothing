@@ -16,8 +16,10 @@ const jakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: "WearWise | AI-Powered Personal Stylist",
-  description: "Your personal AI stylist. Shop, get outfit recommendations, and manage your wardrobe through conversation.",
+  description: "Your personal AI stylist. Shop and get outfit recommendations through conversation.",
 };
+
+export const dynamic = 'force-dynamic';
 
 export default async function RootLayout({
   children,

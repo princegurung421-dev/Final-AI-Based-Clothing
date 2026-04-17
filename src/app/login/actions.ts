@@ -2,6 +2,7 @@
 
 import { signIn, signOut } from "@/auth"
 import { AuthError } from "next-auth"
+import { revalidatePath } from "next/cache"
 
 export async function authenticate(
   prevState: string | undefined,
@@ -18,6 +19,9 @@ export async function authenticate(
           return 'Something went wrong.';
       }
     }
+    // signIn on success throws NEXT_REDIRECT — invalidate layout cache so
+    // the navbar picks up the new session on the next render
+    revalidatePath('/', 'layout')
     throw error;
   }
 }

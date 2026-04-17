@@ -28,7 +28,7 @@ export default async function Home() {
   const CAPABILITIES = [
     { title: "Shop by conversation", desc: "Describe what you need and get instant product recommendations with one-tap Add to Bag.", step: "01", gradient: "from-emerald-500 to-teal-600" },
     { title: "Outfit recommendations", desc: "Weather-aware suggestions tailored to your occasion, budget, and personal style.", step: "02", gradient: "from-amber-500 to-orange-600" },
-    { title: "Manage your wardrobe", desc: "Upload what you own and get advice on styling pieces you already have.", step: "03", gradient: "from-violet-500 to-purple-600" },
+    { title: "Know your style", desc: "Tell us your sizes and preferences once — every suggestion is tailored to you.", step: "03", gradient: "from-violet-500 to-purple-600" },
     { title: "Track everything", desc: "Check your cart, orders, and delivery status -- all through the chat.", step: "04", gradient: "from-sky-500 to-blue-600" },
   ];
 
@@ -44,7 +44,7 @@ export default async function Home() {
   const TESTIMONIALS = [
     { name: "Sophie M.", role: "Marketing Manager", text: "The AI stylist picked the perfect outfit for my interview. I got compliments all day and the job offer.", rating: 5 },
     { name: "James K.", role: "Software Engineer", text: "I hate shopping but WearWise makes it effortless. I just describe the occasion and get a whole outfit in seconds.", rating: 5 },
-    { name: "Priya R.", role: "Design Lead", text: "The wardrobe feature is genius. It knows what I own and suggests new pieces that actually work with my existing clothes.", rating: 5 },
+    { name: "Priya R.", role: "Design Lead", text: "The weather-aware recommendations are genius. It always suggests pieces that actually work for the day ahead.", rating: 5 },
   ];
 
   return (

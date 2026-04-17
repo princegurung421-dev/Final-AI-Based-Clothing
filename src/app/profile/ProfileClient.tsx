@@ -257,7 +257,7 @@ export default function ProfileClient({ user }: { user: any }) {
       >
         <div className="flex flex-col gap-4">
           <p className="text-[15px] text-muted">
-            This will permanently delete your account, wardrobe, and order history. This cannot be undone.
+            This will permanently delete your account and order history. This cannot be undone.
           </p>
           <Input 
             label="Type 'DELETE' to confirm" 

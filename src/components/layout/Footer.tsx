@@ -47,7 +47,7 @@ export function Footer() {
             <div className="flex flex-col gap-2.5">
               <Link href="/login" className="text-[14px] text-white/50 hover:text-primary transition-colors">Sign In</Link>
               <Link href="/register" className="text-[14px] text-white/50 hover:text-primary transition-colors">Create Account</Link>
-              <Link href="/wardrobe" className="text-[14px] text-white/50 hover:text-primary transition-colors">My Wardrobe</Link>
+              <Link href="/orders" className="text-[14px] text-white/50 hover:text-primary transition-colors">My Orders</Link>
             </div>
           </div>
         </div>

@@ -2,53 +2,37 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
 
-const SESSION_DURATION_MS = 30 * 60 * 1000; // 30 minutes
-
-// GET: Load the active chat session (or previous session summary for context)
+// GET: list all chat sessions for the user (sidebar)
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ sessions: [] });
   }
 
-  const userId = session.user.id;
-
-  // Find the most recent session
-  const latestSession = await prisma.chatSession.findFirst({
-    where: { userId },
+  const sessions = await prisma.chatSession.findMany({
+    where: { userId: session.user.id },
     orderBy: { updatedAt: 'desc' },
+    select: {
+      id: true,
+      title: true,
+      summary: true,
+      updatedAt: true,
+      createdAt: true,
+    },
+    take: 50,
   });
 
-  if (!latestSession) {
-    return NextResponse.json({ messages: [], previousSummary: null, sessionId: null });
-  }
-
-  const now = new Date();
-  const isExpired = now > latestSession.expiresAt;
-
-  if (isExpired) {
-    // Session expired - return empty messages but pass the summary for context
-    return NextResponse.json({
-      messages: [],
-      previousSummary: latestSession.summary || buildSummary(latestSession.messages),
-      sessionId: null,
-    });
-  }
-
-  // Active session - return messages
-  let messages = [];
-  try {
-    messages = JSON.parse(latestSession.messages);
-  } catch { /* ignore */ }
-
   return NextResponse.json({
-    messages,
-    previousSummary: null,
-    sessionId: latestSession.id,
+    sessions: sessions.map(s => ({
+      id: s.id,
+      title: s.title || 'New chat',
+      preview: s.summary?.slice(0, 80) || '',
+      updatedAt: s.updatedAt.toISOString(),
+    })),
   });
 }
 
-// POST: Save messages to the chat session
+// POST: save messages to a chat session (creates if sessionId omitted)
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -58,90 +42,83 @@ export async function POST(req: Request) {
   const userId = session.user.id;
   const { messages, sessionId } = await req.json();
 
-  if (!messages || !Array.isArray(messages)) {
+  if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return NextResponse.json({ error: 'Invalid messages' }, { status: 400 });
   }
 
-  // Verify user exists in DB (JWT may outlive a DB reset/reseed)
-  const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  const userExists = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true },
+  });
   if (!userExists) {
     return NextResponse.json({ error: 'User not found' }, { status: 401 });
   }
 
-  const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
   const messagesJson = JSON.stringify(messages);
-  const summary = buildSummary(messagesJson);
+  const summary = buildSummary(messages);
+  const title = deriveTitle(messages);
 
   if (sessionId) {
-    // Update existing session
     try {
-      await prisma.chatSession.update({
+      const updated = await prisma.chatSession.update({
         where: { id: sessionId, userId },
-        data: { messages: messagesJson, summary, expiresAt, updatedAt: new Date() },
+        data: {
+          messages: messagesJson,
+          summary,
+          title,
+          updatedAt: new Date(),
+        },
       });
-      return NextResponse.json({ sessionId });
+      return NextResponse.json({ sessionId: updated.id });
     } catch {
-      // Session not found or doesn't belong to user - create new one
+      // fall through to create
     }
   }
 
-  // Create new session
-  try {
-    const newSession = await prisma.chatSession.create({
-      data: { userId, messages: messagesJson, summary, expiresAt },
-    });
-    return NextResponse.json({ sessionId: newSession.id });
-  } catch {
-    return NextResponse.json({ error: 'Failed to save session' }, { status: 500 });
-  }
+  const created = await prisma.chatSession.create({
+    data: { userId, title, messages: messagesJson, summary },
+  });
+  return NextResponse.json({ sessionId: created.id });
 }
 
-// DELETE: Clear chat and start fresh
+// DELETE: wipe all chat sessions for this user
 export async function DELETE() {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Mark current sessions as expired (keep them for history but don't load)
-  await prisma.chatSession.updateMany({
-    where: { userId: session.user.id, expiresAt: { gt: new Date() } },
-    data: { expiresAt: new Date() },
-  });
-
+  await prisma.chatSession.deleteMany({ where: { userId: session.user.id } });
   return NextResponse.json({ success: true });
 }
 
-// Build a brief text summary from messages JSON for context carry-forward
-function buildSummary(messagesJson: string): string {
-  try {
-    const msgs = typeof messagesJson === 'string' ? JSON.parse(messagesJson) : messagesJson;
-    if (!Array.isArray(msgs) || msgs.length === 0) return '';
+// ─── Helpers ─────────────────────────────────────────────────
 
-    const textParts: string[] = [];
-    for (const msg of msgs) {
-      const role = msg.role === 'user' ? 'User' : 'Assistant';
-      // Extract text from parts or content
-      let text = '';
-      if (msg.parts) {
-        text = msg.parts
-          .filter((p: any) => p.type === 'text')
-          .map((p: any) => p.text)
-          .join(' ');
-      } else if (msg.content) {
-        text = msg.content;
-      }
-      if (text) {
-        // Truncate long messages
-        const truncated = text.length > 150 ? text.slice(0, 150) + '...' : text;
-        textParts.push(`${role}: ${truncated}`);
-      }
-    }
-
-    // Keep last 10 exchanges max
-    const recent = textParts.slice(-20);
-    return recent.join('\n');
-  } catch {
-    return '';
+function extractText(msg: any): string {
+  if (msg?.parts && Array.isArray(msg.parts)) {
+    return msg.parts.filter((p: any) => p.type === 'text').map((p: any) => p.text).join(' ').trim();
   }
+  if (typeof msg?.content === 'string') return msg.content;
+  return '';
+}
+
+function deriveTitle(messages: any[]): string {
+  const firstUser = messages.find(m => m.role === 'user');
+  if (!firstUser) return 'New chat';
+  const text = extractText(firstUser);
+  if (!text) return 'New chat';
+  return text.length > 60 ? text.slice(0, 60).trimEnd() + '…' : text;
+}
+
+function buildSummary(messages: any[]): string {
+  const lines: string[] = [];
+  for (const msg of messages) {
+    const role = msg.role === 'user' ? 'User' : 'Assistant';
+    const text = extractText(msg);
+    if (text) {
+      const truncated = text.length > 150 ? text.slice(0, 150) + '…' : text;
+      lines.push(`${role}: ${truncated}`);
+    }
+  }
+  return lines.slice(-20).join('\n');
 }

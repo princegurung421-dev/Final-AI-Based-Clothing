@@ -2,20 +2,19 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Input } from "@/components/ui/Input"
 import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
 import { cn } from "@/lib/utils"
 import { Check } from "lucide-react"
 import { registerUser } from "./actions"
-// Note: We would normally import signIn from next-auth/react for client side immediate login after register
-// For FMP, if the server action passes, we simulate they proceed. In reality, they need to log in after register 
-// or we call next-auth/react signIn() here if success.
 import { signIn } from "next-auth/react"
 
 const STYLE_OPTIONS = ["Minimal", "Classic", "Streetwear", "Smart Casual", "Athleisure", "Boho", "Preppy", "Edgy"];
 
 export default function RegisterPage() {
+  const router = useRouter();
   const [step, setStep] = React.useState(1);
   const [error, setError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -81,10 +80,11 @@ export default function RegisterPage() {
     setIsSubmitting(false);
     
     if (signInResult?.error) {
-      // Very unlikely if just created successfully
       setError("Account created but failed to sign in automatically.");
     } else {
-      setStep(3); // Advance to Done perfectly
+      // Re-fetch server components so the Header picks up the new session
+      router.refresh();
+      setStep(3);
     }
   };
 

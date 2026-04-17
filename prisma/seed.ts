@@ -13,7 +13,6 @@ async function main() {
   await prisma.orderItem.deleteMany()
   await prisma.order.deleteMany()
   await prisma.productImage.deleteMany()
-  await prisma.wardrobeItem.deleteMany()
   await prisma.product.deleteMany()
   await prisma.user.deleteMany()
 
@@ -599,22 +598,6 @@ async function main() {
   }
 
   console.log(`Created ${createdProducts.length} products`)
-
-  // ─── Seed Wardrobe Items for Demo User ─────────────────────
-
-  const wardrobeItems = [
-    { userId: demoUser.id, imageUrl: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&q=80&w=400', category: 'Tops', colour: 'White', tags: JSON.stringify({ Casual: true, Weekend: true }) },
-    { userId: demoUser.id, imageUrl: 'https://images.unsplash.com/photo-1542272604-787c3835535d?auto=format&fit=crop&q=80&w=400', category: 'Trousers', colour: 'Blue', tags: JSON.stringify({ Casual: true, Weekend: true }) },
-    { userId: demoUser.id, imageUrl: 'https://images.unsplash.com/photo-1543163521-1bf539c55dd2?auto=format&fit=crop&q=80&w=400', category: 'Outerwear', colour: 'Black', tags: JSON.stringify({ Work: true, 'Smart Casual': true }) },
-    { userId: demoUser.id, imageUrl: 'https://images.unsplash.com/photo-1460353581641-37baddab0fa2?auto=format&fit=crop&q=80&w=400', category: 'Footwear', colour: 'White', tags: JSON.stringify({ Casual: true, Gym: true }) },
-    { userId: demoUser.id, imageUrl: 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?auto=format&fit=crop&q=80&w=400', category: 'Tops', colour: 'Navy', tags: JSON.stringify({ Work: true, 'Smart Casual': true, 'Date Night': true }) },
-  ]
-
-  for (const item of wardrobeItems) {
-    await prisma.wardrobeItem.create({ data: item })
-  }
-
-  console.log(`Created ${wardrobeItems.length} wardrobe items for demo user`)
 
   // ─── Seed Sample Orders for Demo User ──────────────────────
 
