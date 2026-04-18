@@ -88,7 +88,7 @@ export function Header({ user, cartCount = 0 }: HeaderProps) {
     e.preventDefault();
     if (!searchQuery.trim()) return;
     setSearchOpen(false);
-    router.push(`/assistant?q=${encodeURIComponent(searchQuery.trim())}`);
+    router.push(`/browse?q=${encodeURIComponent(searchQuery.trim())}`);
     setSearchQuery("");
   };
 

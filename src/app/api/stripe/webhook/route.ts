@@ -50,12 +50,33 @@ export async function POST(req: Request) {
           if (userId) {
             await tx.cartItem.deleteMany({ where: { userId } })
           }
-          // Decrement stock for each line item
           const items = await tx.orderItem.findMany({ where: { orderId } })
           for (const item of items) {
             await tx.productStock.updateMany({
               where: { productId: item.productId, size: item.size },
               data: { quantity: { decrement: item.quantity } },
+            })
+          }
+          // Record the promo redemption and increment use count
+          if (existing.promoCodeId && userId) {
+            await tx.promoCode.update({
+              where: { id: existing.promoCodeId },
+              data: { usesCount: { increment: 1 } },
+            })
+            // upsert to stay idempotent on webhook retries
+            await tx.promoRedemption.upsert({
+              where: {
+                promoCodeId_userId: {
+                  promoCodeId: existing.promoCodeId,
+                  userId,
+                },
+              },
+              update: { orderId },
+              create: {
+                promoCodeId: existing.promoCodeId,
+                userId,
+                orderId,
+              },
             })
           }
         })

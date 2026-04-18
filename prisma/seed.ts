@@ -13,6 +13,9 @@ async function main() {
   await prisma.orderItem.deleteMany()
   await prisma.order.deleteMany()
   await prisma.productImage.deleteMany()
+  await prisma.promoRedemption.deleteMany()
+  await prisma.promoCode.deleteMany()
+  await prisma.contactMessage.deleteMany()
   await prisma.product.deleteMany()
   await prisma.user.deleteMany()
 
@@ -103,7 +106,7 @@ async function main() {
       weather: JSON.stringify(['Cold', 'Mild']),
       season: JSON.stringify(['Autumn/Winter']),
       images: {
-        create: [{ url: 'https://images.unsplash.com/photo-1544923246-77307dd270aa?auto=format&fit=crop&q=80&w=800', isPrimary: true }],
+        create: [{ url: 'https://plus.unsplash.com/premium_photo-1765207888157-83180e591b3a?q=80&w=987&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D', isPrimary: true }],
       },
       reviews: {
         create: [{ rating: 5, reviewerName: 'James D.', text: 'Brilliant for autumn walks. Light but very warm.' }],
@@ -469,7 +472,7 @@ async function main() {
       weather: JSON.stringify(['Warm', 'Hot']),
       season: JSON.stringify(['Spring/Summer']),
       images: {
-        create: [{ url: 'https://images.unsplash.com/photo-1588850561407-ed78c334e67a?auto=format&fit=crop&q=80&w=800', isPrimary: true }],
+        create: [{ url: 'https://images.unsplash.com/photo-1627683566270-bf7e75dfec0a?q=80&w=1015&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D', isPrimary: true }],
       },
       stock: { create: [{ size: 'S/M', quantity: 12 }, { size: 'L/XL', quantity: 10 }] },
     },
@@ -504,7 +507,7 @@ async function main() {
       weather: JSON.stringify(['Cold', 'Mild']),
       season: JSON.stringify(['Autumn/Winter']),
       images: {
-        create: [{ url: 'https://images.unsplash.com/photo-1434389677669-e08b4cda3a94?auto=format&fit=crop&q=80&w=800', isPrimary: true }],
+        create: [{ url: 'https://plus.unsplash.com/premium_photo-1763898811217-8237b4baf1b3?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MXx8Q2FibGUlMjBLbml0JTIwQ2FyZGlnYW58ZW58MHx8MHx8fDA%3D', isPrimary: true }],
       },
       reviews: {
         create: [
@@ -527,7 +530,7 @@ async function main() {
       weather: JSON.stringify(['Warm', 'Hot', 'Mild']),
       season: JSON.stringify(['All year']),
       images: {
-        create: [{ url: 'https://images.unsplash.com/photo-1562886877-aaaa5c14c2e9?auto=format&fit=crop&q=80&w=800', isPrimary: true }],
+        create: [{ url: 'https://images.unsplash.com/photo-1711598850173-0b0a0f69b4f4?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8UGVyZm9ybWFuY2UlMjBSdW5uaW5nJTIwU2hvcnRzfGVufDB8fDB8fHww', isPrimary: true }],
       },
       stock: { create: [{ size: 'S', quantity: 15 }, { size: 'M', quantity: 20 }, { size: 'L', quantity: 12 }] },
     },
@@ -641,6 +644,21 @@ async function main() {
   })
 
   console.log(`Created sample orders: ${order1.orderNumber}, ${order2.orderNumber}`)
+
+  // ─── Seed Promo Codes ──────────────────────────────────────
+
+  await prisma.promoCode.create({
+    data: {
+      code: 'FIRSTORDER',
+      description: 'New customer welcome — 5% off any order',
+      discountType: 'PERCENTAGE',
+      discountValue: 5,
+      oncePerUser: true,
+      active: true,
+    },
+  })
+  console.log('Created promo code: FIRSTORDER')
+
   console.log('Seeding complete!')
 }
 

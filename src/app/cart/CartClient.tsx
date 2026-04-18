@@ -10,10 +10,19 @@ import { useToast } from "@/components/ui/Toast"
 import { Minus, Plus, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
+const PROMO_KEY = "wearwise:promo"
+
 export default function CartClient({ initialItems, upsellProducts }: { initialItems: any[], upsellProducts: any[] }) {
   const [items, setItems] = React.useState(initialItems)
   const [promoCode, setPromoCode] = React.useState("")
   const [promoMessage, setPromoMessage] = React.useState("")
+  const [appliedPromo, setAppliedPromo] = React.useState<null | {
+    code: string
+    discount: number
+    discountType: "PERCENTAGE" | "FIXED"
+    discountValue: number
+  }>(null)
+  const [applying, setApplying] = React.useState(false)
   const { addToast } = useToast()
   const router = useRouter()
 
@@ -59,20 +68,84 @@ export default function CartClient({ initialItems, upsellProducts }: { initialIt
     }
   }
 
-  const handleApplyPromo = (e: React.FormEvent) => {
+  // Restore previously applied promo code (re-validate against current cart)
+  React.useEffect(() => {
+    const stored = localStorage.getItem(PROMO_KEY)
+    if (!stored) return
+    try {
+      const { code } = JSON.parse(stored)
+      if (code) revalidateStoredPromo(code)
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const revalidateStoredPromo = async (code: string) => {
+    try {
+      const res = await fetch("/api/promo/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setAppliedPromo({
+          code: data.code,
+          discount: data.discount,
+          discountType: data.discountType,
+          discountValue: data.discountValue,
+        })
+        setPromoCode(data.code)
+        localStorage.setItem(PROMO_KEY, JSON.stringify({ code: data.code }))
+      } else {
+        localStorage.removeItem(PROMO_KEY)
+      }
+    } catch { /* ignore */ }
+  }
+
+  const handleApplyPromo = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!promoCode.trim()) return
-    
-    if (promoCode.toUpperCase() === "WEARWISE10") {
-      setPromoMessage("Code applied — 10% off")
-    } else {
-      setPromoMessage("Code not recognised")
+    if (!promoCode.trim() || applying) return
+    setApplying(true)
+    setPromoMessage("")
+    try {
+      const res = await fetch("/api/promo/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: promoCode }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setAppliedPromo({
+          code: data.code,
+          discount: data.discount,
+          discountType: data.discountType,
+          discountValue: data.discountValue,
+        })
+        setPromoCode(data.code)
+        setPromoMessage(`Code applied — ${data.discountType === "PERCENTAGE" ? `${data.discountValue}% off` : `£${data.discountValue.toFixed(2)} off`}`)
+        localStorage.setItem(PROMO_KEY, JSON.stringify({ code: data.code }))
+      } else {
+        setAppliedPromo(null)
+        setPromoMessage(data.reason || "Code not recognised")
+        localStorage.removeItem(PROMO_KEY)
+      }
+    } catch {
+      setPromoMessage("Could not verify code — please try again.")
+    } finally {
+      setApplying(false)
     }
   }
 
+  const handleRemovePromo = () => {
+    setAppliedPromo(null)
+    setPromoCode("")
+    setPromoMessage("")
+    localStorage.removeItem(PROMO_KEY)
+  }
+
   const subtotal = items.reduce((acc, item) => acc + (Number(item.product.price) * item.quantity), 0)
-  const isPromoApplied = promoMessage.includes("applied")
-  const discountedSubtotal = isPromoApplied ? subtotal * 0.9 : subtotal
+  const discount = appliedPromo?.discount ?? 0
+  const discountedSubtotal = Math.max(0, subtotal - discount)
   const delivery = discountedSubtotal > 50 ? 0 : 3.99
   const total = discountedSubtotal + (items.length > 0 ? delivery : 0)
 
@@ -207,10 +280,13 @@ export default function CartClient({ initialItems, upsellProducts }: { initialIt
                   <span>Subtotal</span>
                   <span>£{subtotal.toFixed(2)}</span>
                 </div>
-                {isPromoApplied && (
+                {appliedPromo && (
                   <div className="flex justify-between text-success">
-                    <span>Discount (10%)</span>
-                    <span>-£{(subtotal * 0.1).toFixed(2)}</span>
+                    <span>
+                      Discount
+                      <span className="ml-1 font-mono text-[12px] text-success/70">({appliedPromo.code})</span>
+                    </span>
+                    <span>-£{appliedPromo.discount.toFixed(2)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-muted">
@@ -241,27 +317,43 @@ export default function CartClient({ initialItems, upsellProducts }: { initialIt
 
             {/* Promo Code */}
             <div className="pt-8 border-t border-border">
-              <form onSubmit={handleApplyPromo} className="flex gap-2">
-                <input 
-                  type="text" 
-                  placeholder="Promo Code" 
-                  className="h-10 border border-border flex-1 px-3 text-[14px] focus:outline-none focus:border-primary uppercase tracking-wider"
-                  value={promoCode}
-                  onChange={(e) => {
-                    setPromoCode(e.target.value)
-                    setPromoMessage("")
-                  }}
-                />
-                <Button type="submit" variant="secondary">Apply</Button>
-              </form>
-              {promoMessage && (
-                <p className={cn(
-                  "text-[13px] mt-2 font-medium",
-                  promoMessage.includes("applied") ? "text-success" : "text-error"
-                )}>
-                  {promoMessage}
-                </p>
+              {appliedPromo ? (
+                <div className="flex items-center justify-between gap-2 bg-success/5 border border-success/20 rounded-lg px-3 py-2.5">
+                  <div>
+                    <p className="text-[12px] text-muted">Promo applied</p>
+                    <p className="text-[14px] font-mono font-semibold tracking-wider text-success">{appliedPromo.code}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemovePromo}
+                    className="text-[12px] text-muted hover:text-error transition-colors"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleApplyPromo} className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Promo Code"
+                    className="h-10 border border-border flex-1 px-3 text-[14px] focus:outline-none focus:border-primary uppercase tracking-wider"
+                    value={promoCode}
+                    onChange={(e) => {
+                      setPromoCode(e.target.value.toUpperCase())
+                      setPromoMessage("")
+                    }}
+                  />
+                  <Button type="submit" variant="secondary" disabled={applying || !promoCode.trim()}>
+                    {applying ? "…" : "Apply"}
+                  </Button>
+                </form>
               )}
+              {promoMessage && !appliedPromo && (
+                <p className="text-[13px] mt-2 font-medium text-error">{promoMessage}</p>
+              )}
+              <p className="text-[11px] text-muted mt-2">
+                Only one code per order. Try <span className="font-mono font-semibold">FIRSTORDER</span> for 5% off your first order.
+              </p>
             </div>
           </div>
         </div>

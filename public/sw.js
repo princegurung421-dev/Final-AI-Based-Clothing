@@ -1,7 +1,7 @@
-// Minimal service worker — present so Chrome treats WearWise as installable.
-// Deliberately does NOT cache anything; every request goes to the network.
-// If you want offline support later, swap the fetch handler for a strategy
-// (cache-first for static, network-first for pages, etc.).
+// Service worker for PWA installability.
+// Chrome's install-eligibility check requires a registered SW that ACTUALLY
+// handles fetch (an empty handler does not count). We pass every request
+// through to the network via event.respondWith(fetch(...)).
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -12,5 +12,7 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  // Pass through — the browser handles the request normally.
+  // Pure passthrough — no caching. The respondWith call is what makes Chrome
+  // count this as a real fetch handler for install eligibility.
+  event.respondWith(fetch(event.request));
 });

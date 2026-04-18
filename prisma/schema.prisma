@@ -22,6 +22,8 @@ model User {
   orders           Order[]
   cartItems        CartItem[]
   chatSessions     ChatSession[]
+  contactMessages  ContactMessage[]
+  promoRedemptions PromoRedemption[]
 }
 
 enum Role {
@@ -98,6 +100,9 @@ model Order {
   totalValue      Decimal       @db.Decimal(10, 2)
   subtotal        Decimal       @db.Decimal(10, 2)
   deliveryCost    Decimal       @db.Decimal(10, 2)
+  discountAmount  Decimal       @db.Decimal(10, 2) @default(0)
+  promoCodeId     String?
+  promoCode       PromoCode?    @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
   deliveryAddress String        @db.Text // JSON string
   trackingNumber  String?
   notes           String?       @db.Text
@@ -105,6 +110,7 @@ model Order {
   updatedAt       DateTime      @updatedAt
 
   items           OrderItem[]
+  redemptions     PromoRedemption[]
 }
 
 model OrderItem {
@@ -138,4 +144,62 @@ model ChatSession {
   summary   String?  @db.Text // Summary for context carry-forward
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum ContactStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+}
+
+model ContactMessage {
+  id            String        @id @default(cuid())
+  name          String
+  email         String
+  topic         String?
+  message       String        @db.Text
+  status        ContactStatus @default(NEW)
+  userId        String?
+  user          User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  internalNote  String?       @db.Text
+  respondedAt   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+model PromoCode {
+  id            String       @id @default(cuid())
+  code          String       @unique  // stored uppercase
+  description   String?
+  discountType  DiscountType @default(PERCENTAGE)
+  discountValue Decimal      @db.Decimal(10, 2)  // e.g. 5.00 = 5% or £5 depending on type
+  minSubtotal   Decimal?     @db.Decimal(10, 2)  // minimum cart subtotal to apply
+  maxUses       Int?         // total across all users; null = unlimited
+  usesCount     Int          @default(0)
+  oncePerUser   Boolean      @default(true)
+  active        Boolean      @default(true)
+  expiresAt     DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  orders        Order[]
+  redemptions   PromoRedemption[]
+}
+
+model PromoRedemption {
+  id          String    @id @default(cuid())
+  promoCodeId String
+  promoCode   PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId     String?
+  order       Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+
+  @@unique([promoCodeId, userId])  // DB-enforced one-per-user
 }

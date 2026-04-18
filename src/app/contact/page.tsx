@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { Mail, MessageCircle, Clock, MapPin } from "lucide-react"
+import { ContactForm } from "./ContactForm"
 
 export const metadata: Metadata = {
   title: "Contact | WearWise",
@@ -81,70 +82,7 @@ export default function ContactPage() {
           </div>
         </div>
 
-        <form
-          action="mailto:hello@wearwise.co.uk"
-          method="post"
-          encType="text/plain"
-          className="bg-white border border-border rounded-2xl p-6 md:p-8 space-y-4"
-        >
-          <div>
-            <label className="text-[13px] font-medium text-foreground mb-1.5 block">
-              Your name
-            </label>
-            <input
-              type="text"
-              name="name"
-              required
-              className="w-full h-11 px-3 text-[14px] border border-border rounded-lg focus:border-primary outline-none transition-colors"
-            />
-          </div>
-          <div>
-            <label className="text-[13px] font-medium text-foreground mb-1.5 block">Email</label>
-            <input
-              type="email"
-              name="email"
-              required
-              className="w-full h-11 px-3 text-[14px] border border-border rounded-lg focus:border-primary outline-none transition-colors"
-            />
-          </div>
-          <div>
-            <label className="text-[13px] font-medium text-foreground mb-1.5 block">Topic</label>
-            <select
-              name="topic"
-              className="w-full h-11 px-3 text-[14px] border border-border rounded-lg focus:border-primary outline-none bg-white"
-            >
-              <option>Order question</option>
-              <option>Return / refund</option>
-              <option>Product enquiry</option>
-              <option>Press / partnerships</option>
-              <option>Something else</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-[13px] font-medium text-foreground mb-1.5 block">
-              Message
-            </label>
-            <textarea
-              name="message"
-              rows={5}
-              required
-              className="w-full px-3 py-2 text-[14px] border border-border rounded-lg focus:border-primary outline-none transition-colors resize-y"
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full h-11 bg-primary text-white rounded-lg text-[14px] font-semibold hover:bg-primary/90 transition-colors"
-          >
-            Send message
-          </button>
-          <p className="text-[11px] text-muted">
-            By submitting this form you agree to our{" "}
-            <Link href="/privacy" className="underline underline-offset-2">
-              privacy policy
-            </Link>
-            .
-          </p>
-        </form>
+        <ContactForm />
       </div>
     </div>
   )

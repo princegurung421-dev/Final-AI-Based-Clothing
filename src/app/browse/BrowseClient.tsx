@@ -32,7 +32,9 @@ export default function BrowseClient({ initialProducts, initialCount }: { initia
     occasion: searchParams.getAll("occasion"),
     colour: searchParams.getAll("colour"),
     inStock: searchParams.get("inStock") === "true",
-    sort: searchParams.get("sort") || "newest"
+    sort: searchParams.get("sort") || "newest",
+    priceMin: searchParams.get("priceMin") || "",
+    priceMax: searchParams.get("priceMax") || "",
   })
 
   // Debounced search and filter application
@@ -46,6 +48,8 @@ export default function BrowseClient({ initialProducts, initialCount }: { initia
       filters.colour.forEach(c => params.append("colour", c))
       if (filters.inStock) params.set("inStock", "true")
       if (filters.sort !== "newest") params.set("sort", filters.sort)
+      if (filters.priceMin) params.set("priceMin", filters.priceMin)
+      if (filters.priceMax) params.set("priceMax", filters.priceMax)
       
       router.push(`/browse?${params.toString()}`, { scroll: false })
     }, 300)
@@ -71,9 +75,18 @@ export default function BrowseClient({ initialProducts, initialCount }: { initia
       occasion: [],
       colour: [],
       inStock: false,
-      sort: "newest"
+      sort: "newest",
+      priceMin: "",
+      priceMax: "",
     })
   }
+
+  const PRICE_PRESETS = [
+    { label: "Under £50", min: "", max: "50" },
+    { label: "£50 – £100", min: "50", max: "100" },
+    { label: "£100 – £200", min: "100", max: "200" },
+    { label: "Over £200", min: "200", max: "" },
+  ]
 
   const FilterContent = () => (
     <div className="flex flex-col gap-8 pb-20 md:pb-0">
@@ -142,11 +155,64 @@ export default function BrowseClient({ initialProducts, initialCount }: { initia
       </div>
       <div className="h-px bg-border w-full" />
 
+      {/* Price */}
+      <div>
+        <h3 className="text-[13px] font-medium text-muted uppercase tracking-wider mb-4">Price</h3>
+        <div className="flex flex-col gap-2 mb-3">
+          {PRICE_PRESETS.map(p => {
+            const active = filters.priceMin === p.min && filters.priceMax === p.max
+            return (
+              <button
+                key={p.label}
+                onClick={() =>
+                  setFilters(prev => ({
+                    ...prev,
+                    priceMin: active ? "" : p.min,
+                    priceMax: active ? "" : p.max,
+                  }))
+                }
+                className={cn(
+                  "text-[14px] text-left py-1.5 pr-3 transition-colors",
+                  active ? "text-primary font-medium" : "text-foreground hover:text-primary"
+                )}
+              >
+                {p.label}
+              </button>
+            )
+          })}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex-1">
+            <label className="text-[11px] text-muted block mb-1">Min £</label>
+            <input
+              type="number"
+              min="0"
+              value={filters.priceMin}
+              onChange={(e) => setFilters(prev => ({ ...prev, priceMin: e.target.value }))}
+              className="w-full h-9 px-2 text-[13px] border border-border rounded focus:border-primary outline-none"
+              placeholder="0"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="text-[11px] text-muted block mb-1">Max £</label>
+            <input
+              type="number"
+              min="0"
+              value={filters.priceMax}
+              onChange={(e) => setFilters(prev => ({ ...prev, priceMax: e.target.value }))}
+              className="w-full h-9 px-2 text-[13px] border border-border rounded focus:border-primary outline-none"
+              placeholder="any"
+            />
+          </div>
+        </div>
+      </div>
+      <div className="h-px bg-border w-full" />
+
       {/* Availability */}
       <div>
         <label className="flex items-center gap-3 cursor-pointer group">
-          <input 
-            type="checkbox" 
+          <input
+            type="checkbox"
             className="w-4 h-4 border-border rounded-sm text-primary focus:ring-primary focus:ring-offset-0"
             checked={filters.inStock}
             onChange={(e) => setFilters(prev => ({ ...prev, inStock: e.target.checked }))}

@@ -2,6 +2,15 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { PWAInstallButton } from "@/components/PWAInstall"
+import {
+  VisaMark,
+  MastercardMark,
+  AmexMark,
+  ApplePayMark,
+  GooglePayMark,
+  StripeAttribution,
+} from "@/components/layout/PaymentBadges"
 
 export function Footer() {
   const pathname = usePathname();
@@ -51,9 +60,25 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
+        {/* Payment methods accepted */}
+        <div className="pt-8 mb-8 border-t border-white/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
+          <div>
+            <p className="text-[11px] uppercase tracking-widest font-semibold text-white/50 mb-3">We accept</p>
+            <div className="flex items-center gap-2">
+              <VisaMark />
+              <MastercardMark />
+              <AmexMark />
+              <ApplePayMark />
+              <GooglePayMark />
+            </div>
+          </div>
+          <StripeAttribution />
+        </div>
+
+        <div className="pt-6 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
           <span className="text-[13px] text-white/40">&copy; {new Date().getFullYear()} WearWise. All rights reserved.</span>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-6 flex-wrap justify-center">
+            <PWAInstallButton />
             <Link href="/privacy" className="text-[13px] text-white/40 hover:text-primary transition-colors">Privacy Policy</Link>
             <Link href="/terms" className="text-[13px] text-white/40 hover:text-primary transition-colors">Terms of Service</Link>
           </div>

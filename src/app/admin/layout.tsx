@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { LayoutDashboard, Package, ShoppingCart } from "lucide-react"
+import { LayoutDashboard, Package, ShoppingCart, Mail, Tag } from "lucide-react"
 
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +19,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
            </Link>
            <Link href="/admin/orders" className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/5 transition-colors text-[14px] font-medium text-foreground">
              <ShoppingCart className="w-4 h-4 text-muted" /> Orders
+           </Link>
+           <Link href="/admin/promos" className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/5 transition-colors text-[14px] font-medium text-foreground">
+             <Tag className="w-4 h-4 text-muted" /> Promo codes
+           </Link>
+           <Link href="/admin/contact" className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/5 transition-colors text-[14px] font-medium text-foreground">
+             <Mail className="w-4 h-4 text-muted" /> Messages
            </Link>
          </nav>
       </aside>

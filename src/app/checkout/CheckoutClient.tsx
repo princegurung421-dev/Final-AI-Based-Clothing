@@ -42,6 +42,29 @@ export default function CheckoutClient({
   const [step, setStep] = React.useState(1)
   const [orderNumber, setOrderNumber] = React.useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
+  const [appliedPromo, setAppliedPromo] = React.useState<null | {
+    code: string
+    discount: number
+  }>(null)
+
+  React.useEffect(() => {
+    const stored = localStorage.getItem("wearwise:promo")
+    if (!stored) return
+    try {
+      const { code } = JSON.parse(stored)
+      if (!code) return
+      fetch("/api/promo/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      })
+        .then(r => r.json())
+        .then(d => {
+          if (d.ok) setAppliedPromo({ code: d.code, discount: d.discount })
+        })
+        .catch(() => {})
+    } catch { /* ignore */ }
+  }, [])
 
   const [formData, setFormData] = React.useState<DeliveryForm>({
     fullName: user?.name || "",
@@ -74,6 +97,8 @@ export default function CheckoutClient({
   const onPaymentSuccess = (ordNumber: string) => {
     setOrderNumber(ordNumber)
     setStep(3)
+    // Clear the stored promo so next order doesn't auto-re-apply it.
+    try { localStorage.removeItem("wearwise:promo") } catch { /* ignore */ }
     // Nudge header/cart UI; webhook will clear the actual cart shortly.
     window.dispatchEvent(new Event("cart:updated"))
     setTimeout(() => window.dispatchEvent(new Event("cart:updated")), 2500)
@@ -98,10 +123,16 @@ export default function CheckoutClient({
       try {
         // 1. Tell our server to snapshot the cart into a PENDING order and
         //    create a PaymentIntent. It returns the clientSecret we confirm with.
+        let promoCode: string | undefined
+        try {
+          const stored = localStorage.getItem("wearwise:promo")
+          if (stored) promoCode = JSON.parse(stored)?.code
+        } catch { /* ignore */ }
+
         const initRes = await fetch("/api/stripe/checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formData),
+          body: JSON.stringify({ ...formData, promoCode }),
         })
 
         const initData = await initRes.json()
@@ -191,13 +222,22 @@ export default function CheckoutClient({
           </p>
         </div>
 
-        <div className="bg-muted/5 p-4 mb-8 border border-border text-[14px]">
-          <div className="flex justify-between mb-2">
+        <div className="bg-muted/5 p-4 mb-8 border border-border text-[14px] space-y-2">
+          <div className="flex justify-between">
             <span className="text-muted">Items ({itemCount})</span>
+            <span className="text-muted">£{total.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between font-medium">
+          {appliedPromo && (
+            <div className="flex justify-between text-success">
+              <span>
+                Promo <span className="font-mono text-[12px]">{appliedPromo.code}</span>
+              </span>
+              <span>-£{appliedPromo.discount.toFixed(2)}</span>
+            </div>
+          )}
+          <div className="flex justify-between font-medium pt-2 border-t border-border">
             <span>Total to pay</span>
-            <span>£{total.toFixed(2)}</span>
+            <span>£{Math.max(0, total - (appliedPromo?.discount || 0)).toFixed(2)}</span>
           </div>
         </div>
 

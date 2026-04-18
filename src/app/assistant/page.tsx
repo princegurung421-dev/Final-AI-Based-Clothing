@@ -116,6 +116,7 @@ export default function AssistantPage() {
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
   const [loadingSession, setLoadingSession] = React.useState(false)
   const [hasLoadedSessions, setHasLoadedSessions] = React.useState(false)
+  const [confirmDelete, setConfirmDelete] = React.useState<string | null>(null)
   const hasSentInitialQuery = React.useRef(false)
   const saveTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -185,10 +186,20 @@ export default function AssistantPage() {
     hasSentInitialQuery.current = false
   }
 
-  // ── Delete a session ────────────────────────────────────
-  const deleteSession = async (id: string, e: React.MouseEvent) => {
+  // ── Delete a session (two-step — no browser confirm dialog) ─
+  const askDelete = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!confirm("Delete this chat?")) return
+    setConfirmDelete(id)
+  }
+
+  const cancelDelete = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setConfirmDelete(null)
+  }
+
+  const confirmDeleteSession = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setConfirmDelete(null)
     try {
       await fetch(`${SESSION_API}/${id}`, { method: 'DELETE' })
       if (id === sessionId) newChat()
@@ -564,30 +575,54 @@ export default function AssistantPage() {
           )}
           {sessions.map(s => {
             const active = s.id === sessionId
+            const isConfirming = confirmDelete === s.id
             return (
-              <button
+              <div
                 key={s.id}
-                onClick={() => loadSession(s.id)}
                 className={cn(
-                  "group w-full text-left px-3 py-2.5 rounded-lg transition-colors flex items-start gap-2",
-                  active ? "bg-primary/10 text-primary" : "hover:bg-muted/5 text-foreground",
+                  "group w-full rounded-lg transition-colors",
+                  active ? "bg-primary/10" : "hover:bg-muted/5",
                 )}
               >
-                <MessageCircle className={cn("w-3.5 h-3.5 shrink-0 mt-0.5", active ? "text-primary" : "text-muted")} />
-                <div className="flex-1 min-w-0">
-                  <p className={cn("text-[13px] truncate", active ? "font-semibold" : "font-medium")}>{s.title}</p>
-                  {s.preview && (
-                    <p className="text-[11px] text-muted truncate mt-0.5">{s.preview}</p>
-                  )}
-                </div>
-                <button
-                  onClick={(e) => deleteSession(s.id, e)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-error/10 rounded text-muted hover:text-error shrink-0"
-                  aria-label="Delete chat"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </button>
+                {isConfirming ? (
+                  <div className="px-3 py-2.5 flex items-center justify-between gap-2">
+                    <p className="text-[12px] font-medium text-foreground truncate flex-1">Delete this chat?</p>
+                    <button
+                      onClick={(e) => cancelDelete(e)}
+                      className="text-[11px] px-2 py-1 text-muted hover:text-foreground transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={(e) => confirmDeleteSession(s.id, e)}
+                      className="text-[11px] px-2 py-1 bg-error text-white rounded hover:bg-error/90 transition-colors font-semibold"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => loadSession(s.id)}
+                    className="w-full text-left px-3 py-2.5 flex items-start gap-2"
+                  >
+                    <MessageCircle className={cn("w-3.5 h-3.5 shrink-0 mt-0.5", active ? "text-primary" : "text-muted")} />
+                    <div className="flex-1 min-w-0">
+                      <p className={cn("text-[13px] truncate", active ? "font-semibold text-primary" : "font-medium text-foreground")}>{s.title}</p>
+                      {s.preview && (
+                        <p className="text-[11px] text-muted truncate mt-0.5">{s.preview}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={(e) => askDelete(s.id, e)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-error/10 rounded text-muted hover:text-error shrink-0"
+                      aria-label="Delete chat"
+                      type="button"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </button>
+                )}
+              </div>
             )
           })}
         </div>

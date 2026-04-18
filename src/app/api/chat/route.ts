@@ -99,41 +99,42 @@ export async function POST(req: Request) {
     : '';
 
   const systemPrompt = `
-You are WearWise AI, an expert British fashion stylist and personal shopping assistant.
-Your tone is refined, warm, quietly confident, natural, and helpful. Never use emojis. Never be overly enthusiastic.
-Never greet the user with "hello" or "hi" -- answer each message directly.
+You are WearWise AI, a warm, well-read British fashion stylist and shopping assistant.
+Speak like a real person: natural, conversational, occasionally witty. Never robotic or formulaic.
+Do not use emojis. Do not greet with "hello"/"hi"; just respond directly.
 
 ${userContext}
 Current weather: ${weatherSummary}${previousContext}
 
-You have powerful tools to help users with EVERYTHING:
+INTERPRETING REQUESTS (this is critical):
+Treat the user's language as intent, not literal keywords. Translate vibes into filters:
+- "summer", "beach", "holiday", "vacation" → weather: Warm/Hot, season: Spring/Summer
+- "winter", "cosy", "cold day" → weather: Cold, season: Autumn/Winter
+- "date night", "dinner" → occasion: Date Night or Evening
+- "office", "meeting", "work thing" → occasion: Work or Smart Casual
+- "gym", "running", "workout" → occasion: Gym
+- "party", "going out" → occasion: Evening
+- "brunch", "weekend" → occasion: Brunch or Weekend
+- colour words ("navy", "cream", "earth tones") → colour filter
+Combine cues: "a casual outfit for a warm weekend" = occasion: Weekend + weather: Warm.
+If the user mentions a piece ("a jacket", "some trousers") pass it as the query AND optionally set category.
 
-SHOPPING:
-- Use searchProducts to find items by query, category, occasion, price, colour, or weather.
-- Use getProductDetails for full info on a specific product.
-- Use getTrending to show popular items.
-- Use getRecommendations for smart outfit suggestions.
+TOOLS:
+- searchProducts: the general purpose finder (query + filters)
+- getProductDetails: a specific item
+- getTrending: popular pieces
+- getRecommendations: curated outfits for an occasion/weather/budget
+- addToCart, viewCart, removeFromCart: the bag
+- viewOrders, getOrderDetails: past orders
+- getStyleAdvice: pulls the user's profile + current weather for personalised advice
 
-CART:
-- Use addToCart to add items. ALWAYS confirm the size before adding -- ask the user if not specified. Show available sizes from searchProducts results.
-- Use viewCart to show what's in the user's bag.
-- Use removeFromCart to remove items.
-
-ORDERS:
-- Use viewOrders to show order history.
-- Use getOrderDetails for a specific order.
-
-STYLE:
-- Use getStyleAdvice to get context for personalized recommendations based on weather and preferences.
-
-GUIDELINES:
-- Keep responses concise -- 1-3 sentences plus tool results.
-- When recommending products, call the relevant tool and let the results speak. Add a brief styling note.
-- If the user is not logged in and tries an auth-required action, tell them to sign in first.
-- When showing products, mention key details: name, price, and why it works for them.
-- Be proactive: if someone asks about outfits for an occasion, also consider the weather.
-- For cart actions, always confirm what was added/removed.
-- You can chain tools: e.g., search for products, then recommend a complete outfit.
+BEHAVIOUR:
+- Prefer one tool call per turn unless you genuinely need two.
+- After a tool returns, write 1–2 sentences of natural commentary. Avoid "Here are some products that…" boilerplate — say why the picks work.
+- When adding to cart, ALWAYS confirm the size. If unspecified, ask which available size they want.
+- If a tool returns no matches, try again with looser filters (drop the most specific one) before giving up.
+- If the user isn't logged in and asks for cart/orders, say "you'll need to sign in at /login" in one line.
+- Keep prose tight. Never list four adjectives where one will do.
 `;
 
   try {
@@ -146,33 +147,84 @@ GUIDELINES:
 
         // ── Search Products ──
         searchProducts: tool({
-          description: 'Search the WearWise store for products. Use filters to narrow results. Returns product cards with images, prices, and sizes.',
+          description:
+            'Search the WearWise store for products. `query` is matched semantically across product name, description, category, colour and even occasion/weather tags — so natural phrasing like "summer outfit" or "something cosy for the office" works. Use the structured filters (category/occasion/weather/colour) to further narrow results.',
           parameters: z.object({
-            query: z.string().optional().describe("Search term like 'jacket', 'blue dress', 'summer outfit'"),
+            query: z.string().optional().describe("Free-text query; may contain vibes like 'summer beach', 'cosy office', 'date night navy'"),
             category: z.string().optional().describe("Category: Outerwear, Tops, Trousers, Dresses, Footwear, Accessories, Knitwear, Activewear, Suits, Loungewear"),
             occasion: z.string().optional().describe("Occasion: Work, Casual, Weekend, Date Night, Formal, Holiday, Gym, Brunch, Evening, Smart Casual"),
             priceMax: z.number().optional().describe('Maximum price in GBP'),
+            priceMin: z.number().optional().describe('Minimum price in GBP'),
             colour: z.string().optional().describe('Colour name like Black, Navy, White'),
             weather: z.string().optional().describe('Weather: Cold, Mild, Warm, Hot, Rainy'),
           }),
-          execute: async ({ query, category, occasion, priceMax, colour, weather }) => {
+          execute: async ({ query, category, occasion, priceMax, priceMin, colour, weather }) => {
             const where: any = { isVisible: true, deletedAt: null };
             const AND: any[] = [];
 
+            // Semantic expansion of the free-text query
+            const SEMANTIC_MAP: Record<string, string[]> = {
+              summer: ['Hot', 'Warm', 'Holiday', 'Spring/Summer'],
+              winter: ['Cold', 'Autumn/Winter'],
+              spring: ['Mild', 'Spring/Summer'],
+              autumn: ['Mild', 'Cold', 'Autumn/Winter'],
+              fall: ['Mild', 'Cold', 'Autumn/Winter'],
+              beach: ['Holiday', 'Warm', 'Hot', 'Spring/Summer'],
+              holiday: ['Holiday', 'Warm'],
+              vacation: ['Holiday', 'Warm'],
+              party: ['Evening', 'Date Night', 'Formal'],
+              evening: ['Evening', 'Date Night'],
+              office: ['Work', 'Smart Casual'],
+              meeting: ['Work', 'Formal', 'Smart Casual'],
+              work: ['Work', 'Smart Casual'],
+              formal: ['Formal', 'Work'],
+              wedding: ['Formal', 'Evening', 'Date Night'],
+              date: ['Date Night', 'Evening'],
+              gym: ['Gym', 'Active'],
+              workout: ['Gym', 'Active'],
+              running: ['Gym', 'Active'],
+              weekend: ['Weekend', 'Casual'],
+              casual: ['Casual', 'Weekend'],
+              brunch: ['Brunch', 'Smart Casual'],
+              rain: ['Rainy'],
+              rainy: ['Rainy'],
+              cold: ['Cold'],
+              hot: ['Hot', 'Warm'],
+              warm: ['Warm', 'Mild'],
+              cozy: ['Cold', 'Autumn/Winter'],
+              cosy: ['Cold', 'Autumn/Winter'],
+              lounge: ['Casual'],
+            };
+
             if (query) {
-              AND.push({
-                OR: [
-                  { name: { contains: query, mode: 'insensitive' } },
-                  { description: { contains: query, mode: 'insensitive' } },
-                  { category: { contains: query, mode: 'insensitive' } },
-                ],
-              });
+              const orClauses: any[] = [
+                { name: { contains: query, mode: 'insensitive' } },
+                { description: { contains: query, mode: 'insensitive' } },
+                { category: { contains: query, mode: 'insensitive' } },
+                { colourName: { contains: query, mode: 'insensitive' } },
+                { occasions: { contains: query, mode: 'insensitive' } },
+                { weather: { contains: query, mode: 'insensitive' } },
+                { season: { contains: query, mode: 'insensitive' } },
+              ];
+              const lower = query.toLowerCase();
+              const extra = new Set<string>();
+              for (const [k, tags] of Object.entries(SEMANTIC_MAP)) {
+                if (lower.includes(k)) tags.forEach((t) => extra.add(t));
+              }
+              for (const tag of extra) {
+                orClauses.push({ occasions: { contains: tag, mode: 'insensitive' } });
+                orClauses.push({ weather: { contains: tag, mode: 'insensitive' } });
+                orClauses.push({ season: { contains: tag, mode: 'insensitive' } });
+              }
+              AND.push({ OR: orClauses });
             }
+
             if (category) AND.push({ category: { contains: category, mode: 'insensitive' } });
             if (occasion) AND.push({ occasions: { contains: occasion, mode: 'insensitive' } });
             if (colour) AND.push({ colourName: { contains: colour, mode: 'insensitive' } });
             if (weather) AND.push({ weather: { contains: weather, mode: 'insensitive' } });
-            if (priceMax) AND.push({ price: { lte: priceMax } });
+            if (typeof priceMax === 'number') AND.push({ price: { lte: priceMax } });
+            if (typeof priceMin === 'number') AND.push({ price: { gte: priceMin } });
             if (AND.length > 0) where.AND = AND;
 
             try {

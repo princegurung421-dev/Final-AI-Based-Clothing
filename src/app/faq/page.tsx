@@ -87,8 +87,8 @@ export default function FAQPage() {
               {group.section}
             </h2>
             <div className="flex flex-col divide-y divide-border/60">
-              {group.items.map(item => (
-                <details key={item.q} className="group py-5">
+              {group.items.map((item, idx) => (
+                <details key={item.q} className="group py-5" open={idx === 0}>
                   <summary className="flex items-center justify-between cursor-pointer list-none">
                     <span className="text-[16px] font-medium pr-4">{item.q}</span>
                     <span className="text-muted text-[18px] transition-transform group-open:rotate-45 select-none">
