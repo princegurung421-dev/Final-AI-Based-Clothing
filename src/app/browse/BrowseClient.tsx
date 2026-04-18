@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card } from "@/components/ui/Card"
 import { Search, SlidersHorizontal, X } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, effectivePrice, hasSale, formatPrice } from "@/lib/utils"
 
 const CATEGORIES = ["Tops", "Trousers", "Dresses", "Outerwear", "Footwear", "Accessories"]
 const OCCASIONS = ["Work", "Casual", "Date Night", "Gym", "Smart Casual", "Weekend"]
@@ -352,7 +352,16 @@ export default function BrowseClient({ initialProducts, initialCount }: { initia
                           </div>
                         )}
 
-                        <p className="text-[15px] mb-2">£{Number(product.price).toFixed(2)}</p>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className={cn("text-[15px]", hasSale(product) ? "text-primary font-semibold" : "")}>
+                            {formatPrice(effectivePrice(product))}
+                          </span>
+                          {hasSale(product) && (
+                            <span className="text-[13px] text-muted line-through">
+                              {formatPrice(Number(product.price))}
+                            </span>
+                          )}
+                        </div>
                         
                         <div className="mt-auto pt-2 flex flex-wrap gap-1">
                           {(parsedOccasions as string[]).slice(0, 2).map(tag => (

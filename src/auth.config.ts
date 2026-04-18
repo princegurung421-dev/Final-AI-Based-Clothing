@@ -4,6 +4,17 @@ export const authConfig = {
   pages: {
     signIn: '/login',
   },
+  // JWT + 30-day sessions, refreshed on every request via updateAge=0.
+  // In practice this means: sign in once, stay signed in for 30 days of
+  // inactivity; any activity extends the session another 30 days.
+  session: {
+    strategy: 'jwt',
+    maxAge: 60 * 60 * 24 * 30, // 30 days
+    updateAge: 60 * 60 * 24,   // refresh at most once / day
+  },
+  jwt: {
+    maxAge: 60 * 60 * 24 * 30,
+  },
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;

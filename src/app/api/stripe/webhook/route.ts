@@ -49,6 +49,11 @@ export async function POST(req: Request) {
           })
           if (userId) {
             await tx.cartItem.deleteMany({ where: { userId } })
+            // Cart paid for — clear the applied promo so next order starts fresh
+            await tx.user.update({
+              where: { id: userId },
+              data: { activePromoCode: null },
+            })
           }
           const items = await tx.orderItem.findMany({ where: { orderId } })
           for (const item of items) {
@@ -57,13 +62,11 @@ export async function POST(req: Request) {
               data: { quantity: { decrement: item.quantity } },
             })
           }
-          // Record the promo redemption and increment use count
           if (existing.promoCodeId && userId) {
             await tx.promoCode.update({
               where: { id: existing.promoCodeId },
               data: { usesCount: { increment: 1 } },
             })
-            // upsert to stay idempotent on webhook retries
             await tx.promoRedemption.upsert({
               where: {
                 promoCodeId_userId: {

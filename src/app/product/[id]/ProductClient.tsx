@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
 import { Modal } from "@/components/ui/Modal"
 import { useToast } from "@/components/ui/Toast"
-import { cn } from "@/lib/utils"
+import { cn, effectivePrice, hasSale, formatPrice } from "@/lib/utils"
 import { addCartItem } from "@/app/cart/actions"
 
 export default function ProductClient({ 
@@ -125,9 +125,14 @@ export default function ProductClient({
         <div className="flex flex-col">
           <h1 className="text-2xl md:text-3xl font-medium tracking-tight mb-2">{product.name}</h1>
           <div className="flex items-center gap-3 mb-6">
-            <span className="text-xl text-primary font-medium">£{Number(product.price).toFixed(2)}</span>
-            {product.salePrice && (
-              <span className="text-lg text-muted line-through">£{Number(product.salePrice).toFixed(2)}</span>
+            <span className="text-xl text-primary font-medium">{formatPrice(effectivePrice(product))}</span>
+            {hasSale(product) && (
+              <>
+                <span className="text-lg text-muted line-through">{formatPrice(Number(product.price))}</span>
+                <span className="text-[11px] font-bold uppercase tracking-wider bg-error/10 text-error px-2 py-1 rounded-full">
+                  Save {Math.round((1 - effectivePrice(product) / Number(product.price)) * 100)}%
+                </span>
+              </>
             )}
           </div>
 
@@ -239,7 +244,16 @@ export default function ProductClient({
                     )}
                   </div>
                   <h3 className="font-medium text-[14px] mb-1">{relProduct.name}</h3>
-                  <p className="text-[14px] text-muted">£{Number(relProduct.price).toFixed(2)}</p>
+                  <div className="flex items-center gap-1.5 text-[14px]">
+                    <span className={hasSale(relProduct) ? "text-primary font-medium" : "text-muted"}>
+                      {formatPrice(effectivePrice(relProduct))}
+                    </span>
+                    {hasSale(relProduct) && (
+                      <span className="text-muted line-through text-[12px]">
+                        {formatPrice(Number(relProduct.price))}
+                      </span>
+                    )}
+                  </div>
                 </Link>
               )
             })}

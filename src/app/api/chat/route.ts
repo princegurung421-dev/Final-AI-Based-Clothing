@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { z } from 'zod';
 import { embedQuery, cosine, embeddingsEnabled } from '@/lib/embeddings';
+import { rateLimit } from '@/lib/ratelimit';
 
 const CHAT_SIMILARITY_FLOOR = 0.45;
 
@@ -48,11 +49,15 @@ function computeRating(reviews: { rating: number }[]) {
 function formatProduct(p: any) {
   const primaryImage = p.images?.find((i: any) => i.isPrimary) || p.images?.[0];
   const inStockSizes = (p.stock || []).filter((s: any) => s.quantity > 0).map((s: any) => s.size);
+  const reg = Number(p.price);
+  const sale = p.salePrice != null ? Number(p.salePrice) : null;
+  const effective = sale != null && sale > 0 && sale < reg ? sale : reg;
   return {
     id: p.id,
     name: p.name,
-    price: Number(p.price),
-    salePrice: p.salePrice ? Number(p.salePrice) : null,
+    price: effective,                                    // the price the customer pays
+    originalPrice: effective !== reg ? reg : null,        // original, for strike-through
+    onSale: effective !== reg,
     category: p.category,
     colourName: p.colourName,
     description: p.description,
@@ -69,6 +74,10 @@ function formatProduct(p: any) {
 // ─── POST Handler ────────────────────────────────────────────
 
 export async function POST(req: Request) {
+  // LLM calls cost money + can be rate-limited upstream; cap at 30 turns/min/IP.
+  const rl = rateLimit(req, { namespace: 'chat', limit: 30, windowMs: 60_000 });
+  if (rl) return rl;
+
   const { messages, latitude, longitude, previousSummary } = await req.json();
   if (!messages) return new Response('Missing messages', { status: 400 });
 

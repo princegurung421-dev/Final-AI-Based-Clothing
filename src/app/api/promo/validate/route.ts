@@ -2,8 +2,14 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { validatePromo } from "@/lib/promo"
+import { effectivePrice } from "@/lib/utils"
+import { rateLimit } from "@/lib/ratelimit"
 
 export async function POST(req: Request) {
+  // 10 attempts / minute / IP — stops brute-force guessing of promo codes.
+  const rl = rateLimit(req, { namespace: "promo-validate", limit: 10, windowMs: 60_000 })
+  if (rl) return rl
+
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ ok: false, reason: "Sign in to use promo codes." }, { status: 401 })
@@ -27,7 +33,7 @@ export async function POST(req: Request) {
     include: { product: true },
   })
   const subtotal = cartItems.reduce(
-    (acc, item) => acc + Number(item.product.price) * item.quantity,
+    (acc, item) => acc + effectivePrice(item.product) * item.quantity,
     0
   )
   if (subtotal <= 0) {
@@ -39,6 +45,12 @@ export async function POST(req: Request) {
   if (!result.ok) {
     return NextResponse.json({ ok: false, reason: result.reason }, { status: 200 })
   }
+
+  // Persist the applied code on the user so it follows them across devices.
+  await prisma.user.update({
+    where: { id: session.user.id },
+    data: { activePromoCode: result.promo.code },
+  })
 
   return NextResponse.json({
     ok: true,

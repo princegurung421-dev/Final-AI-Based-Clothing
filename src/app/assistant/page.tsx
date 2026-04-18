@@ -319,8 +319,15 @@ export default function AssistantPage() {
               </Link>
               <div className="p-3 flex flex-col flex-grow">
                 <Link href={`/product/${item.id}`} className="text-[13px] font-medium text-foreground truncate mb-0.5 hover:text-primary transition-colors">{item.name}</Link>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[13px] text-muted">£{Number(item.price).toFixed(2)}</span>
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span className={cn("text-[13px]", item.onSale ? "text-primary font-semibold" : "text-muted")}>
+                    £{Number(item.price).toFixed(2)}
+                  </span>
+                  {item.onSale && item.originalPrice && (
+                    <span className="text-[11px] text-muted line-through">
+                      £{Number(item.originalPrice).toFixed(2)}
+                    </span>
+                  )}
                   {item.rating > 0 && (
                     <span className="flex items-center gap-0.5 text-[11px] text-muted">
                       <Star className="w-3 h-3 fill-amber-400 text-amber-400" />

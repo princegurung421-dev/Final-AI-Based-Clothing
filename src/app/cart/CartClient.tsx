@@ -8,9 +8,7 @@ import { Card } from "@/components/ui/Card"
 import { updateCartQuantity, removeCartItem, syncPendingCart } from "./actions"
 import { useToast } from "@/components/ui/Toast"
 import { Minus, Plus, Trash2 } from "lucide-react"
-import { cn } from "@/lib/utils"
-
-const PROMO_KEY = "wearwise:promo"
+import { cn, effectivePrice, hasSale, formatPrice } from "@/lib/utils"
 
 export default function CartClient({ initialItems, upsellProducts }: { initialItems: any[], upsellProducts: any[] }) {
   const [items, setItems] = React.useState(initialItems)
@@ -68,39 +66,25 @@ export default function CartClient({ initialItems, upsellProducts }: { initialIt
     }
   }
 
-  // Restore previously applied promo code (re-validate against current cart)
+  // Load the user's active promo from the DB (survives across devices).
   React.useEffect(() => {
-    const stored = localStorage.getItem(PROMO_KEY)
-    if (!stored) return
-    try {
-      const { code } = JSON.parse(stored)
-      if (code) revalidateStoredPromo(code)
-    } catch { /* ignore */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    (async () => {
+      try {
+        const res = await fetch("/api/promo/active", { cache: "no-store" })
+        if (!res.ok) return
+        const data = await res.json()
+        if (data.applied) {
+          setAppliedPromo({
+            code: data.applied.code,
+            discount: data.applied.discount,
+            discountType: data.applied.discountType,
+            discountValue: data.applied.discountValue,
+          })
+          setPromoCode(data.applied.code)
+        }
+      } catch { /* ignore */ }
+    })()
   }, [])
-
-  const revalidateStoredPromo = async (code: string) => {
-    try {
-      const res = await fetch("/api/promo/validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
-      })
-      const data = await res.json()
-      if (data.ok) {
-        setAppliedPromo({
-          code: data.code,
-          discount: data.discount,
-          discountType: data.discountType,
-          discountValue: data.discountValue,
-        })
-        setPromoCode(data.code)
-        localStorage.setItem(PROMO_KEY, JSON.stringify({ code: data.code }))
-      } else {
-        localStorage.removeItem(PROMO_KEY)
-      }
-    } catch { /* ignore */ }
-  }
 
   const handleApplyPromo = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -123,11 +107,9 @@ export default function CartClient({ initialItems, upsellProducts }: { initialIt
         })
         setPromoCode(data.code)
         setPromoMessage(`Code applied — ${data.discountType === "PERCENTAGE" ? `${data.discountValue}% off` : `£${data.discountValue.toFixed(2)} off`}`)
-        localStorage.setItem(PROMO_KEY, JSON.stringify({ code: data.code }))
       } else {
         setAppliedPromo(null)
         setPromoMessage(data.reason || "Code not recognised")
-        localStorage.removeItem(PROMO_KEY)
       }
     } catch {
       setPromoMessage("Could not verify code — please try again.")
@@ -136,14 +118,14 @@ export default function CartClient({ initialItems, upsellProducts }: { initialIt
     }
   }
 
-  const handleRemovePromo = () => {
+  const handleRemovePromo = async () => {
     setAppliedPromo(null)
     setPromoCode("")
     setPromoMessage("")
-    localStorage.removeItem(PROMO_KEY)
+    try { await fetch("/api/promo/active", { method: "DELETE" }) } catch { /* ignore */ }
   }
 
-  const subtotal = items.reduce((acc, item) => acc + (Number(item.product.price) * item.quantity), 0)
+  const subtotal = items.reduce((acc, item) => acc + (effectivePrice(item.product) * item.quantity), 0)
   const discount = appliedPromo?.discount ?? 0
   const discountedSubtotal = Math.max(0, subtotal - discount)
   const delivery = discountedSubtotal > 50 ? 0 : 3.99
@@ -196,7 +178,16 @@ export default function CartClient({ initialItems, upsellProducts }: { initialIt
                         </Link>
                         <p className="text-[14px] text-muted mb-2">Size: {item.size}</p>
                       </div>
-                      <p className={cn("text-[15px] font-medium", isOutOfStock && "text-muted")}>£{Number(item.product.price).toFixed(2)}</p>
+                      <div className="text-right shrink-0">
+                        <p className={cn("text-[15px] font-medium", isOutOfStock && "text-muted")}>
+                          {formatPrice(effectivePrice(item.product))}
+                        </p>
+                        {hasSale(item.product) && (
+                          <p className="text-[12px] text-muted line-through">
+                            {formatPrice(Number(item.product.price))}
+                          </p>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between mt-auto pt-4">
@@ -252,7 +243,7 @@ export default function CartClient({ initialItems, upsellProducts }: { initialIt
                       </Link>
                       <Link href={`/product/${upsell.id}`} className="text-[13px] font-medium line-clamp-1 hover:text-primary transition-colors">{upsell.name}</Link>
                       <div className="flex items-center justify-between mt-1">
-                        <span className="text-[13px] text-muted">£{Number(upsell.price).toFixed(2)}</span>
+                        <span className={cn("text-[13px]", hasSale(upsell) ? "text-primary font-semibold" : "text-muted")}>{formatPrice(effectivePrice(upsell))}</span>
                         <button 
                           className="w-6 h-6 rounded-full bg-muted/10 flex items-center justify-center text-primary hover:bg-primary hover:text-white transition-colors"
                           // For MVP, just redirect to detail page instead of complex inline add

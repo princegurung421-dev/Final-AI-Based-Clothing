@@ -48,22 +48,14 @@ export default function CheckoutClient({
   }>(null)
 
   React.useEffect(() => {
-    const stored = localStorage.getItem("wearwise:promo")
-    if (!stored) return
-    try {
-      const { code } = JSON.parse(stored)
-      if (!code) return
-      fetch("/api/promo/validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
+    fetch("/api/promo/active", { cache: "no-store" })
+      .then(r => r.json())
+      .then(d => {
+        if (d.applied) {
+          setAppliedPromo({ code: d.applied.code, discount: d.applied.discount })
+        }
       })
-        .then(r => r.json())
-        .then(d => {
-          if (d.ok) setAppliedPromo({ code: d.code, discount: d.discount })
-        })
-        .catch(() => {})
-    } catch { /* ignore */ }
+      .catch(() => {})
   }, [])
 
   const [formData, setFormData] = React.useState<DeliveryForm>({
@@ -82,9 +74,7 @@ export default function CheckoutClient({
     if (!formData.fullName) errs.fullName = "Required"
     if (!formData.addressLine1) errs.addressLine1 = "Required"
     if (!formData.city) errs.city = "Required"
-    const pcRegex = /^[A-Z]{1,2}[0-9][A-Z0-9]? [0-9][A-Z]{2}$/i
     if (!formData.postcode) errs.postcode = "Required"
-    else if (!pcRegex.test(formData.postcode)) errs.postcode = "Invalid UK Postcode"
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -97,9 +87,8 @@ export default function CheckoutClient({
   const onPaymentSuccess = (ordNumber: string) => {
     setOrderNumber(ordNumber)
     setStep(3)
-    // Clear the stored promo so next order doesn't auto-re-apply it.
-    try { localStorage.removeItem("wearwise:promo") } catch { /* ignore */ }
-    // Nudge header/cart UI; webhook will clear the actual cart shortly.
+    // Webhook will clear cart + stored promo server-side once payment succeeds.
+    // Just nudge the header cart badge to re-fetch.
     window.dispatchEvent(new Event("cart:updated"))
     setTimeout(() => window.dispatchEvent(new Event("cart:updated")), 2500)
   }
@@ -122,17 +111,12 @@ export default function CheckoutClient({
 
       try {
         // 1. Tell our server to snapshot the cart into a PENDING order and
-        //    create a PaymentIntent. It returns the clientSecret we confirm with.
-        let promoCode: string | undefined
-        try {
-          const stored = localStorage.getItem("wearwise:promo")
-          if (stored) promoCode = JSON.parse(stored)?.code
-        } catch { /* ignore */ }
-
+        //    create a PaymentIntent. The server reads the applied promo code
+        //    from the user row (DB), so we only send the address here.
         const initRes = await fetch("/api/stripe/checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...formData, promoCode }),
+          body: JSON.stringify(formData),
         })
 
         const initData = await initRes.json()
@@ -202,6 +186,7 @@ export default function CheckoutClient({
           <CardElement
             onReady={() => setCardReady(true)}
             options={{
+              hidePostalCode: true, // we already collect it as part of the delivery address
               style: {
                 base: {
                   fontSize: "15px",

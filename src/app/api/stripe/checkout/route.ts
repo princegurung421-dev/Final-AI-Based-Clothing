@@ -3,8 +3,14 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { assertStripe } from "@/lib/stripe"
 import { validatePromo } from "@/lib/promo"
+import { effectivePrice } from "@/lib/utils"
+import { rateLimit } from "@/lib/ratelimit"
 
 export async function POST(req: Request) {
+  // 20 order-init attempts / minute — generous but caps a runaway retry loop.
+  const rl = rateLimit(req, { namespace: "stripe-checkout", limit: 20, windowMs: 60_000 })
+  if (rl) return rl
+
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Not logged in" }, { status: 401 })
@@ -12,18 +18,18 @@ export async function POST(req: Request) {
   const userId = session.user.id
 
   const body = await req.json()
-  const {
-    addressLine1,
-    addressLine2,
-    city,
-    postcode,
-    country,
-    fullName,
-    promoCode,
-  } = body || {}
+  const { addressLine1, addressLine2, city, postcode, country, fullName } = body || {}
   if (!addressLine1 || !city || !postcode) {
     return NextResponse.json({ error: "Missing address fields" }, { status: 400 })
   }
+
+  // Read the applied promo code from the user row on the server — never trust
+  // a client-sent value here since it's the basis of the discount.
+  const userRow = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { activePromoCode: true },
+  })
+  const promoCode = userRow?.activePromoCode || null
 
   const cartItems = await prisma.cartItem.findMany({
     where: { userId },
@@ -49,7 +55,7 @@ export async function POST(req: Request) {
   }
 
   const subtotal = cartItems.reduce(
-    (acc, item) => acc + Number(item.product.price) * item.quantity,
+    (acc, item) => acc + effectivePrice(item.product) * item.quantity,
     0
   )
 
@@ -104,7 +110,7 @@ export async function POST(req: Request) {
           productName: item.product.name,
           size: item.size,
           quantity: item.quantity,
-          price: item.product.price,
+          price: effectivePrice(item.product), // lock in sale price if one was active
           imageUrl: item.product.images?.[0]?.url || null,
         })),
       },

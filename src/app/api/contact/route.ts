@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { rateLimit } from "@/lib/ratelimit"
 
 export async function POST(req: Request) {
+  // 5 messages / minute / IP — stops form spam without blocking real users
+  const rl = rateLimit(req, { namespace: "contact", limit: 5, windowMs: 60_000 })
+  if (rl) return rl
+
   let body: any
   try {
     body = await req.json()
@@ -21,17 +26,25 @@ export async function POST(req: Request) {
       { status: 400 }
     )
   }
-
-  // Simple email shape check
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Invalid email address." }, { status: 400 })
   }
-
+  if (name.length > 120) {
+    return NextResponse.json({ error: "Name is too long." }, { status: 400 })
+  }
   if (message.length > 5000) {
     return NextResponse.json({ error: "Message is too long (max 5000 characters)." }, { status: 400 })
   }
 
-  const session = await auth()
+  // Do NOT let a bad session cookie crash the request. If auth() throws, we
+  // treat it as an unauthenticated submission.
+  let userId: string | null = null
+  try {
+    const session = await auth()
+    userId = session?.user?.id || null
+  } catch (e) {
+    console.warn("contact: auth() failed (treating as guest):", (e as any)?.message)
+  }
 
   try {
     const created = await prisma.contactMessage.create({
@@ -40,12 +53,20 @@ export async function POST(req: Request) {
         email,
         topic: topic || null,
         message,
-        userId: session?.user?.id || null,
+        userId,
       },
     })
     return NextResponse.json({ success: true, id: created.id })
-  } catch (e) {
-    console.error("Contact form save failed:", e)
-    return NextResponse.json({ error: "Could not send your message." }, { status: 500 })
+  } catch (e: any) {
+    console.error("contact save failed:", {
+      code: e?.code,
+      name: e?.name,
+      message: e?.message,
+    })
+    const detail =
+      process.env.NODE_ENV === "production"
+        ? "Could not send your message."
+        : `Could not send: ${e?.message || "unknown"}`
+    return NextResponse.json({ error: detail }, { status: 500 })
   }
 }
