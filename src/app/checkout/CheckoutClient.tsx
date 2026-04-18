@@ -28,6 +28,204 @@ type DeliveryForm = {
   country: string
 }
 
+type AppliedPromo = { code: string; discount: number } | null
+
+// ─── PaymentForm — defined at the module level so React doesn't remount it
+//     (and the CardElement with it) on every parent re-render ─────────────
+
+function PaymentForm({
+  formData,
+  itemCount,
+  total,
+  appliedPromo,
+  onBack,
+  onSuccess,
+}: {
+  formData: DeliveryForm
+  itemCount: number
+  total: number
+  appliedPromo: AppliedPromo
+  onBack: () => void
+  onSuccess: (orderNumber: string) => void
+}) {
+  const stripe = useStripe()
+  const elements = useElements()
+  const { addToast } = useToast()
+
+  const [cardReady, setCardReady] = React.useState(false)
+  // Stripe Elements reports completion/errors via onChange.
+  const [cardComplete, setCardComplete] = React.useState(false)
+  const [cardError, setCardError] = React.useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = React.useState(false)
+
+  const cardOptions = React.useMemo(
+    () => ({
+      hidePostalCode: true,
+      disableLink: true,
+      style: {
+        base: {
+          fontSize: "15px",
+          color: "#1C1C1A",
+          fontFamily: "system-ui, sans-serif",
+          "::placeholder": { color: "#aab7c4" },
+        },
+        invalid: { color: "#C05C5C" },
+      },
+    }),
+    []
+  )
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (isSubmitting) return
+    if (!stripe || !elements) {
+      addToast("Payment system is still loading. Try again in a moment.", "error")
+      return
+    }
+    if (!cardComplete) {
+      addToast(cardError || "Please finish entering your card details.", "error")
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const initRes = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      })
+      const initData = await initRes.json()
+      if (!initRes.ok) {
+        addToast(initData.error || "Could not start payment.", "error")
+        setIsSubmitting(false)
+        return
+      }
+      const { clientSecret, orderNumber: ordNumber } = initData as {
+        clientSecret: string
+        orderNumber: string
+      }
+
+      const cardElement = elements.getElement(CardElement)
+      if (!cardElement) {
+        addToast("Card element not ready.", "error")
+        setIsSubmitting(false)
+        return
+      }
+
+      const { error, paymentIntent } = await stripe.confirmCardPayment(
+        clientSecret,
+        {
+          payment_method: {
+            card: cardElement,
+            billing_details: {
+              name: formData.fullName,
+              address: {
+                line1: formData.addressLine1,
+                line2: formData.addressLine2 || undefined,
+                city: formData.city,
+                postal_code: formData.postcode,
+                country: "GB",
+              },
+            },
+          },
+        }
+      )
+
+      if (error) {
+        addToast(error.message || "Payment failed.", "error")
+        setIsSubmitting(false)
+        return
+      }
+
+      if (paymentIntent?.status === "succeeded") {
+        onSuccess(ordNumber)
+      } else if (paymentIntent?.status === "requires_action") {
+        addToast("Payment requires additional authentication.", "info")
+      } else {
+        addToast(`Unexpected payment status: ${paymentIntent?.status}`, "error")
+      }
+    } catch (err: any) {
+      addToast(err?.message || "Checkout failed.", "error")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col">
+      <label className="text-[13px] text-muted block mb-2">Card Details</label>
+      <div className="border border-border p-3 bg-white min-h-12 flex flex-col justify-center mb-4 transition-colors focus-within:border-primary">
+        <CardElement
+          onReady={() => setCardReady(true)}
+          onChange={(event) => {
+            setCardComplete(event.complete)
+            setCardError(event.error?.message || null)
+          }}
+          options={cardOptions}
+        />
+      </div>
+
+      {cardError && (
+        <p className="text-[13px] text-error mb-4 -mt-2">{cardError}</p>
+      )}
+
+      <div className="flex items-center gap-2 mb-8 text-muted mt-2">
+        <Lock className="w-4 h-4" />
+        <p className="text-[12px]">
+          Payments are processed by Stripe — encrypted end to end.
+        </p>
+      </div>
+
+      <div className="bg-muted/5 p-4 mb-8 border border-border text-[14px] space-y-2">
+        <div className="flex justify-between">
+          <span className="text-muted">Items ({itemCount})</span>
+          <span className="text-muted">£{total.toFixed(2)}</span>
+        </div>
+        {appliedPromo && (
+          <div className="flex justify-between text-success">
+            <span>
+              Promo <span className="font-mono text-[12px]">{appliedPromo.code}</span>
+            </span>
+            <span>-£{appliedPromo.discount.toFixed(2)}</span>
+          </div>
+        )}
+        <div className="flex justify-between font-medium pt-2 border-t border-border">
+          <span>Total to pay</span>
+          <span>£{Math.max(0, total - (appliedPromo?.discount || 0)).toFixed(2)}</span>
+        </div>
+      </div>
+
+      <div className="flex justify-between items-center gap-4">
+        <button
+          type="button"
+          onClick={onBack}
+          className="text-[14px] text-muted hover:text-primary transition-colors"
+          disabled={isSubmitting}
+        >
+          ← Back
+        </button>
+        <Button
+          size="lg"
+          type="submit"
+          disabled={isSubmitting || !stripe || !cardReady || !cardComplete}
+        >
+          {isSubmitting ? "Processing…" : `Pay £${Math.max(0, total - (appliedPromo?.discount || 0)).toFixed(2)}`}
+        </Button>
+      </div>
+
+      <p className="mt-4 text-xs text-muted leading-relaxed">
+        <span className="font-semibold text-foreground">Test Card Details</span>
+        <br />
+        <span className="font-mono tracking-wide">4242 4242 4242 4242</span>
+        <br />
+        Expiry: <span className="font-medium">12/31</span> · CVC: <span className="font-medium">123</span>
+      </p>
+    </form>
+  )
+}
+
+// ─── Main checkout container ───────────────────────────────────
+
 export default function CheckoutClient({
   user,
   itemCount,
@@ -37,15 +235,9 @@ export default function CheckoutClient({
   itemCount: number
   total: number
 }) {
-  const { addToast } = useToast()
-
   const [step, setStep] = React.useState(1)
   const [orderNumber, setOrderNumber] = React.useState<string | null>(null)
-  const [isSubmitting, setIsSubmitting] = React.useState(false)
-  const [appliedPromo, setAppliedPromo] = React.useState<null | {
-    code: string
-    discount: number
-  }>(null)
+  const [appliedPromo, setAppliedPromo] = React.useState<AppliedPromo>(null)
 
   React.useEffect(() => {
     fetch("/api/promo/active", { cache: "no-store" })
@@ -87,190 +279,8 @@ export default function CheckoutClient({
   const onPaymentSuccess = (ordNumber: string) => {
     setOrderNumber(ordNumber)
     setStep(3)
-    // Webhook will clear cart + stored promo server-side once payment succeeds.
-    // Just nudge the header cart badge to re-fetch.
     window.dispatchEvent(new Event("cart:updated"))
     setTimeout(() => window.dispatchEvent(new Event("cart:updated")), 2500)
-  }
-
-  const PaymentForm = () => {
-    const stripe = useStripe()
-    const elements = useElements()
-    const [cardReady, setCardReady] = React.useState(false)
-    // Stripe Elements reports completion + errors via onChange, not onReady.
-    // Tracking it here so we can disable Pay until the card is valid.
-    const [cardComplete, setCardComplete] = React.useState(false)
-    const [cardError, setCardError] = React.useState<string | null>(null)
-
-    const handleSubmit = async (e: React.FormEvent) => {
-      e.preventDefault()
-      if (isSubmitting) return
-
-      if (!stripe || !elements) {
-        addToast("Payment system is still loading. Try again in a moment.", "error")
-        return
-      }
-
-      if (!cardComplete) {
-        addToast(cardError || "Please finish entering your card details.", "error")
-        return
-      }
-
-      setIsSubmitting(true)
-
-      try {
-        // 1. Tell our server to snapshot the cart into a PENDING order and
-        //    create a PaymentIntent. The server reads the applied promo code
-        //    from the user row (DB), so we only send the address here.
-        const initRes = await fetch("/api/stripe/checkout", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formData),
-        })
-
-        const initData = await initRes.json()
-        if (!initRes.ok) {
-          addToast(initData.error || "Could not start payment.", "error")
-          setIsSubmitting(false)
-          return
-        }
-
-        const { clientSecret, orderNumber: ordNumber } = initData as {
-          clientSecret: string
-          orderNumber: string
-        }
-
-        // 2. Confirm the card with Stripe. This actually charges the card
-        //    (or produces a decline). Webhook takes over once succeeded.
-        const cardElement = elements.getElement(CardElement)
-        if (!cardElement) {
-          addToast("Card element not ready.", "error")
-          setIsSubmitting(false)
-          return
-        }
-
-        const { error, paymentIntent } = await stripe.confirmCardPayment(
-          clientSecret,
-          {
-            payment_method: {
-              card: cardElement,
-              billing_details: {
-                name: formData.fullName,
-                address: {
-                  line1: formData.addressLine1,
-                  line2: formData.addressLine2 || undefined,
-                  city: formData.city,
-                  postal_code: formData.postcode,
-                  country: "GB",
-                },
-              },
-            },
-          }
-        )
-
-        if (error) {
-          addToast(error.message || "Payment failed.", "error")
-          setIsSubmitting(false)
-          return
-        }
-
-        if (paymentIntent?.status === "succeeded") {
-          onPaymentSuccess(ordNumber)
-        } else if (paymentIntent?.status === "requires_action") {
-          addToast("Payment requires additional authentication.", "info")
-        } else {
-          addToast(`Unexpected payment status: ${paymentIntent?.status}`, "error")
-        }
-      } catch (err: any) {
-        addToast(err?.message || "Checkout failed.", "error")
-      } finally {
-        setIsSubmitting(false)
-      }
-    }
-
-    return (
-      <form onSubmit={handleSubmit} className="flex flex-col">
-        <label className="text-[13px] text-muted block mb-2">Card Details</label>
-        <div className="border border-border p-3 bg-white min-h-12 flex flex-col justify-center mb-4 transition-colors focus-within:border-primary">
-          <CardElement
-            onReady={() => setCardReady(true)}
-            onChange={(event) => {
-              setCardComplete(event.complete)
-              setCardError(event.error?.message || null)
-            }}
-            options={{
-              hidePostalCode: true, // we already collect it as part of the delivery address
-              disableLink: true,    // Stripe Link can swallow events on autofill and leaves Elements in an "incomplete" state
-              style: {
-                base: {
-                  fontSize: "15px",
-                  color: "#1C1C1A",
-                  fontFamily: "system-ui, sans-serif",
-                  "::placeholder": { color: "#aab7c4" },
-                },
-                invalid: { color: "#C05C5C" },
-              },
-            }}
-          />
-        </div>
-
-        {cardError && (
-          <p className="text-[13px] text-error mb-4 -mt-2">{cardError}</p>
-        )}
-
-        <div className="flex items-center gap-2 mb-8 text-muted mt-2">
-          <Lock className="w-4 h-4" />
-          <p className="text-[12px]">
-            Payments are processed by Stripe — encrypted end to end.
-          </p>
-        </div>
-
-        <div className="bg-muted/5 p-4 mb-8 border border-border text-[14px] space-y-2">
-          <div className="flex justify-between">
-            <span className="text-muted">Items ({itemCount})</span>
-            <span className="text-muted">£{total.toFixed(2)}</span>
-          </div>
-          {appliedPromo && (
-            <div className="flex justify-between text-success">
-              <span>
-                Promo <span className="font-mono text-[12px]">{appliedPromo.code}</span>
-              </span>
-              <span>-£{appliedPromo.discount.toFixed(2)}</span>
-            </div>
-          )}
-          <div className="flex justify-between font-medium pt-2 border-t border-border">
-            <span>Total to pay</span>
-            <span>£{Math.max(0, total - (appliedPromo?.discount || 0)).toFixed(2)}</span>
-          </div>
-        </div>
-
-        <div className="flex justify-between items-center gap-4">
-          <button
-            type="button"
-            onClick={() => setStep(1)}
-            className="text-[14px] text-muted hover:text-primary transition-colors"
-            disabled={isSubmitting}
-          >
-            ← Back
-          </button>
-          <Button
-            size="lg"
-            type="submit"
-            disabled={isSubmitting || !stripe || !cardReady || !cardComplete}
-          >
-            {isSubmitting ? "Processing…" : `Pay £${total.toFixed(2)}`}
-          </Button>
-        </div>
-
-       <p className="mt-4 text-xs text-muted leading-relaxed">
-        <span className="font-semibold text-foreground">Test Card Details</span>
-        <br />
-        <span className="font-mono tracking-wide">4242 4242 4242 4242</span>
-        <br />
-        Expiry: <span className="font-medium">12/31</span> · CVC: <span className="font-medium">123</span> · Postcode: <span className="font-medium">RG1 1AF</span>
-      </p>
-      </form>
-    )
   }
 
   return (
@@ -368,7 +378,14 @@ export default function CheckoutClient({
             <h2 className="text-xl font-medium tracking-tight mb-8">Payment</h2>
             {stripePromise ? (
               <Elements stripe={stripePromise}>
-                <PaymentForm />
+                <PaymentForm
+                  formData={formData}
+                  itemCount={itemCount}
+                  total={total}
+                  appliedPromo={appliedPromo}
+                  onBack={() => setStep(1)}
+                  onSuccess={onPaymentSuccess}
+                />
               </Elements>
             ) : (
               <div className="border border-error p-6 bg-error/5 text-error rounded-none mb-6 text-sm">
