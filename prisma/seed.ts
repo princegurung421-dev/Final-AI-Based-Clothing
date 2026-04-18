@@ -1,7 +1,45 @@
 import { PrismaClient } from '@prisma/client'
 import * as bcrypt from 'bcryptjs'
+import { GoogleGenAI } from '@google/genai'
 
 const prisma = new PrismaClient()
+
+const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY
+const genAI = apiKey ? new GoogleGenAI({ apiKey }) : null
+
+function parseTags(json: string) {
+  try {
+    const parsed = JSON.parse(json)
+    return Array.isArray(parsed) ? parsed.join(', ') : ''
+  } catch { return '' }
+}
+
+function productDoc(p: { name: string; description: string; category: string; colourName: string; occasions: string; weather: string; season: string }) {
+  const parts = [p.name, p.description, `Category: ${p.category}.`, `Colour: ${p.colourName}.`]
+  const occ = parseTags(p.occasions)
+  const wea = parseTags(p.weather)
+  const sea = parseTags(p.season)
+  if (occ) parts.push(`Works for: ${occ}.`)
+  if (wea) parts.push(`Suited to weather: ${wea}.`)
+  if (sea) parts.push(`Season: ${sea}.`)
+  return parts.join(' ')
+}
+
+async function embedProductDoc(doc: string): Promise<number[] | null> {
+  if (!genAI) return null
+  try {
+    const res = await genAI.models.embedContent({
+      model: 'gemini-embedding-001',
+      contents: [doc],
+      config: { taskType: 'RETRIEVAL_DOCUMENT', outputDimensionality: 768 },
+    })
+    const values = res.embeddings?.[0]?.values
+    return values ? Array.from(values) : null
+  } catch (e) {
+    console.error('Embedding failed:', (e as any)?.message)
+    return null
+  }
+}
 
 async function main() {
   console.log('Seeding database with expanded catalog...')
@@ -54,6 +92,7 @@ async function main() {
       description: 'A timeless tailored trench coat featuring a double-breasted front and belted waist. Perfect for mild transitional weather.',
       category: 'Outerwear',
       price: 220.00,
+      salePrice: 179.00,
       colourName: 'Beige',
       colourHex: '#F5F5DC',
       occasions: JSON.stringify(['Work', 'Smart Casual', 'Formal']),
@@ -100,6 +139,7 @@ async function main() {
       description: 'Lightweight diamond-quilted puffer vest with recycled down fill. Perfect for layering in changeable weather.',
       category: 'Outerwear',
       price: 135.00,
+      salePrice: 99.00,
       colourName: 'Olive',
       colourHex: '#556B2F',
       occasions: JSON.stringify(['Casual', 'Weekend', 'Smart Casual']),
@@ -141,6 +181,7 @@ async function main() {
       description: 'A breathable linen-cotton blend shirt perfect for summer days. Washed for exceptional softness from day one.',
       category: 'Tops',
       price: 65.00,
+      salePrice: 49.00,
       colourName: 'Light Blue',
       colourHex: '#ADD8E6',
       occasions: JSON.stringify(['Casual', 'Weekend', 'Holiday']),
@@ -237,6 +278,7 @@ async function main() {
       description: 'Airy wide-leg trousers crafted from sustainably sourced European linen. Features a subtle elasticated waistband.',
       category: 'Trousers',
       price: 115.00,
+      salePrice: 89.00,
       colourName: 'Sand',
       colourHex: '#C2B280',
       occasions: JSON.stringify(['Casual', 'Weekend', 'Holiday']),
@@ -401,6 +443,7 @@ async function main() {
       description: 'Handmade in Spain with traditional jute rope sole and premium cotton canvas upper. The quintessential summer shoe.',
       category: 'Footwear',
       price: 55.00,
+      salePrice: 39.00,
       colourName: 'Navy',
       colourHex: '#000080',
       occasions: JSON.stringify(['Casual', 'Holiday', 'Weekend']),
@@ -466,6 +509,7 @@ async function main() {
       description: 'Relaxed cotton bucket hat with a downturned brim. Lightweight and packable for summer adventures.',
       category: 'Accessories',
       price: 28.00,
+      salePrice: 19.00,
       colourName: 'Stone',
       colourHex: '#D2C6B2',
       occasions: JSON.stringify(['Casual', 'Holiday', 'Weekend']),
@@ -579,6 +623,7 @@ async function main() {
       description: 'Relaxed-fit joggers in brushed-back organic cotton fleece. Ribbed cuffs and drawstring waist for a clean finish.',
       category: 'Loungewear',
       price: 58.00,
+      salePrice: 42.00,
       colourName: 'Grey Marl',
       colourHex: '#9E9E9E',
       occasions: JSON.stringify(['Casual', 'Weekend', 'Gym']),
@@ -601,6 +646,25 @@ async function main() {
   }
 
   console.log(`Created ${createdProducts.length} products`)
+
+  // ─── Generate Gemini embeddings for semantic search ────────
+  if (!genAI) {
+    console.log('Skipping embeddings (no GOOGLE_GENERATIVE_AI_API_KEY set).')
+  } else {
+    console.log('Generating embeddings via gemini-embedding-001...')
+    let ok = 0
+    for (const p of createdProducts) {
+      const vec = await embedProductDoc(productDoc(p))
+      if (!vec) continue
+      await prisma.product.update({
+        where: { id: p.id },
+        data: { embedding: vec as any, embeddedAt: new Date() },
+      })
+      ok++
+      process.stdout.write('.')
+    }
+    console.log(`\nEmbedded ${ok}/${createdProducts.length} products`)
+  }
 
   // ─── Seed Sample Orders for Demo User ──────────────────────
 
