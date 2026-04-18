@@ -4,6 +4,30 @@ import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
+import { embedDocument, productDocument } from "@/lib/embeddings"
+
+async function regenerateEmbedding(productId: string) {
+  const p = await prisma.product.findUnique({
+    where: { id: productId },
+    select: {
+      name: true,
+      description: true,
+      category: true,
+      colourName: true,
+      occasions: true,
+      weather: true,
+      season: true,
+    },
+  })
+  if (!p) return
+  const doc = productDocument(p)
+  const vec = await embedDocument(doc)
+  if (!vec) return
+  await prisma.product.update({
+    where: { id: productId },
+    data: { embedding: vec as any, embeddedAt: new Date() },
+  })
+}
 
 type ProductFormInput = {
   name: string
@@ -88,6 +112,10 @@ export async function createProduct(formData: FormData) {
     },
   })
 
+  // Generate semantic embedding so search can find this product.
+  // Fire-and-forget so a slow Gemini call doesn't block the redirect.
+  regenerateEmbedding(product.id).catch(() => {})
+
   revalidatePath("/admin/products")
   revalidatePath("/browse")
   redirect(`/admin/products/${product.id}/edit`)
@@ -143,6 +171,9 @@ export async function updateProduct(productId: string, formData: FormData) {
       })
     }
   })
+
+  // Regenerate the embedding since the document likely changed.
+  regenerateEmbedding(productId).catch(() => {})
 
   revalidatePath("/admin/products")
   revalidatePath(`/admin/products/${productId}/edit`)

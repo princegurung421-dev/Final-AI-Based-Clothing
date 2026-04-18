@@ -57,6 +57,10 @@ model Product {
   season        String         @default("[]") // JSON string array
   isVisible     Boolean        @default(true)
   deletedAt     DateTime?
+  // Gemini embedding (gemini-embedding-001, 768 dims). Regenerated on
+  // every product create/update; null until the first generation.
+  embedding     Json?
+  embeddedAt    DateTime?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 

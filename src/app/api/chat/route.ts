@@ -4,6 +4,9 @@ import { convertToModelMessages, streamText, tool } from 'ai';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { z } from 'zod';
+import { embedQuery, cosine, embeddingsEnabled } from '@/lib/embeddings';
+
+const CHAT_SIMILARITY_FLOOR = 0.45;
 
 const google = createGoogleGenerativeAI({
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY,
@@ -162,63 +165,7 @@ BEHAVIOUR:
             const where: any = { isVisible: true, deletedAt: null };
             const AND: any[] = [];
 
-            // Semantic expansion of the free-text query
-            const SEMANTIC_MAP: Record<string, string[]> = {
-              summer: ['Hot', 'Warm', 'Holiday', 'Spring/Summer'],
-              winter: ['Cold', 'Autumn/Winter'],
-              spring: ['Mild', 'Spring/Summer'],
-              autumn: ['Mild', 'Cold', 'Autumn/Winter'],
-              fall: ['Mild', 'Cold', 'Autumn/Winter'],
-              beach: ['Holiday', 'Warm', 'Hot', 'Spring/Summer'],
-              holiday: ['Holiday', 'Warm'],
-              vacation: ['Holiday', 'Warm'],
-              party: ['Evening', 'Date Night', 'Formal'],
-              evening: ['Evening', 'Date Night'],
-              office: ['Work', 'Smart Casual'],
-              meeting: ['Work', 'Formal', 'Smart Casual'],
-              work: ['Work', 'Smart Casual'],
-              formal: ['Formal', 'Work'],
-              wedding: ['Formal', 'Evening', 'Date Night'],
-              date: ['Date Night', 'Evening'],
-              gym: ['Gym', 'Active'],
-              workout: ['Gym', 'Active'],
-              running: ['Gym', 'Active'],
-              weekend: ['Weekend', 'Casual'],
-              casual: ['Casual', 'Weekend'],
-              brunch: ['Brunch', 'Smart Casual'],
-              rain: ['Rainy'],
-              rainy: ['Rainy'],
-              cold: ['Cold'],
-              hot: ['Hot', 'Warm'],
-              warm: ['Warm', 'Mild'],
-              cozy: ['Cold', 'Autumn/Winter'],
-              cosy: ['Cold', 'Autumn/Winter'],
-              lounge: ['Casual'],
-            };
-
-            if (query) {
-              const orClauses: any[] = [
-                { name: { contains: query, mode: 'insensitive' } },
-                { description: { contains: query, mode: 'insensitive' } },
-                { category: { contains: query, mode: 'insensitive' } },
-                { colourName: { contains: query, mode: 'insensitive' } },
-                { occasions: { contains: query, mode: 'insensitive' } },
-                { weather: { contains: query, mode: 'insensitive' } },
-                { season: { contains: query, mode: 'insensitive' } },
-              ];
-              const lower = query.toLowerCase();
-              const extra = new Set<string>();
-              for (const [k, tags] of Object.entries(SEMANTIC_MAP)) {
-                if (lower.includes(k)) tags.forEach((t) => extra.add(t));
-              }
-              for (const tag of extra) {
-                orClauses.push({ occasions: { contains: tag, mode: 'insensitive' } });
-                orClauses.push({ weather: { contains: tag, mode: 'insensitive' } });
-                orClauses.push({ season: { contains: tag, mode: 'insensitive' } });
-              }
-              AND.push({ OR: orClauses });
-            }
-
+            // Structured filters narrow the candidate pool.
             if (category) AND.push({ category: { contains: category, mode: 'insensitive' } });
             if (occasion) AND.push({ occasions: { contains: occasion, mode: 'insensitive' } });
             if (colour) AND.push({ colourName: { contains: colour, mode: 'insensitive' } });
@@ -228,6 +175,52 @@ BEHAVIOUR:
             if (AND.length > 0) where.AND = AND;
 
             try {
+              // Semantic rank if the user supplied free-text AND we have embeddings.
+              if (query && embeddingsEnabled()) {
+                const [queryVec, candidates] = await Promise.all([
+                  embedQuery(query),
+                  prisma.product.findMany({
+                    where,
+                    include: { images: true, stock: true, reviews: true },
+                    take: 500,
+                  }),
+                ]);
+
+                if (queryVec) {
+                  const withEmb = candidates.filter((p) => Array.isArray(p.embedding));
+                  const scored = withEmb
+                    .map((p) => ({
+                      product: p,
+                      score: cosine(queryVec, p.embedding as unknown as number[]),
+                    }))
+                    .filter((r) => r.score >= CHAT_SIMILARITY_FLOOR)
+                    .sort((a, b) => b.score - a.score)
+                    .slice(0, 6)
+                    .map((r) => r.product);
+
+                  if (scored.length > 0) {
+                    return { type: 'products', items: scored.map(formatProduct) };
+                  }
+                  // semantic returned nothing — fall through to LIKE
+                }
+              }
+
+              // Keyword fallback: covers both "no API key" and "no embeddings yet".
+              if (query) {
+                AND.push({
+                  OR: [
+                    { name: { contains: query, mode: 'insensitive' } },
+                    { description: { contains: query, mode: 'insensitive' } },
+                    { category: { contains: query, mode: 'insensitive' } },
+                    { colourName: { contains: query, mode: 'insensitive' } },
+                    { occasions: { contains: query, mode: 'insensitive' } },
+                    { weather: { contains: query, mode: 'insensitive' } },
+                    { season: { contains: query, mode: 'insensitive' } },
+                  ],
+                });
+                where.AND = AND;
+              }
+
               const products = await prisma.product.findMany({
                 where,
                 take: 6,
@@ -235,7 +228,8 @@ BEHAVIOUR:
                 orderBy: { createdAt: 'desc' },
               });
               return { type: 'products', items: products.map(formatProduct) };
-            } catch {
+            } catch (e) {
+              console.error('searchProducts failed:', e);
               return { type: 'error', error: 'Failed to search products.' };
             }
           },

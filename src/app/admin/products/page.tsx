@@ -3,6 +3,9 @@ import Link from "next/link"
 import { Plus, Edit2, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/Button"
 import { DeleteProductButton } from "./DeleteProductButton"
+import { EmbedBackfillButton } from "./EmbedBackfillButton"
+
+export const dynamic = "force-dynamic"
 
 export default async function AdminProductsPage() {
   const products = await prisma.product.findMany({
@@ -12,19 +15,23 @@ export default async function AdminProductsPage() {
       stock: true,
     },
   })
+  const missingEmbeddings = products.filter(p => !p.embedding).length
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-medium tracking-tight">Manage Products</h1>
           <p className="text-[13px] text-muted mt-1">{products.length} total · {products.filter(p => !p.deletedAt).length} active</p>
         </div>
-        <Link href="/admin/products/new">
-          <Button>
-            <Plus className="w-4 h-4" /> Add Product
-          </Button>
-        </Link>
+        <div className="flex items-center gap-6">
+          <EmbedBackfillButton missing={missingEmbeddings} total={products.length} />
+          <Link href="/admin/products/new">
+            <Button>
+              <Plus className="w-4 h-4" /> Add Product
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <div className="bg-white border border-border rounded-lg shadow-sm overflow-hidden">
