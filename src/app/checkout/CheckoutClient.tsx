@@ -97,6 +97,10 @@ export default function CheckoutClient({
     const stripe = useStripe()
     const elements = useElements()
     const [cardReady, setCardReady] = React.useState(false)
+    // Stripe Elements reports completion + errors via onChange, not onReady.
+    // Tracking it here so we can disable Pay until the card is valid.
+    const [cardComplete, setCardComplete] = React.useState(false)
+    const [cardError, setCardError] = React.useState<string | null>(null)
 
     const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault()
@@ -104,6 +108,11 @@ export default function CheckoutClient({
 
       if (!stripe || !elements) {
         addToast("Payment system is still loading. Try again in a moment.", "error")
+        return
+      }
+
+      if (!cardComplete) {
+        addToast(cardError || "Please finish entering your card details.", "error")
         return
       }
 
@@ -185,8 +194,13 @@ export default function CheckoutClient({
         <div className="border border-border p-3 bg-white min-h-12 flex flex-col justify-center mb-4 transition-colors focus-within:border-primary">
           <CardElement
             onReady={() => setCardReady(true)}
+            onChange={(event) => {
+              setCardComplete(event.complete)
+              setCardError(event.error?.message || null)
+            }}
             options={{
               hidePostalCode: true, // we already collect it as part of the delivery address
+              disableLink: true,    // Stripe Link can swallow events on autofill and leaves Elements in an "incomplete" state
               style: {
                 base: {
                   fontSize: "15px",
@@ -199,6 +213,10 @@ export default function CheckoutClient({
             }}
           />
         </div>
+
+        {cardError && (
+          <p className="text-[13px] text-error mb-4 -mt-2">{cardError}</p>
+        )}
 
         <div className="flex items-center gap-2 mb-8 text-muted mt-2">
           <Lock className="w-4 h-4" />
@@ -238,7 +256,7 @@ export default function CheckoutClient({
           <Button
             size="lg"
             type="submit"
-            disabled={isSubmitting || !stripe || !cardReady}
+            disabled={isSubmitting || !stripe || !cardReady || !cardComplete}
           >
             {isSubmitting ? "Processing…" : `Pay £${total.toFixed(2)}`}
           </Button>
