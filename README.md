@@ -4,6 +4,8 @@
 
 Live deployment: <https://final-ai-based-clothing.vercel.app>
 
+For a non-technical summary of what WearWise does, see [FEATURES.md](./FEATURES.md).
+
 ---
 
 ## Table of Contents
